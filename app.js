@@ -3,10 +3,13 @@ const STORAGE_KEY = "horaires-app-state";
 const btnNow = document.getElementById("btn-now");
 const btnManual = document.getElementById("btn-manual");
 const startTimeInput = document.getElementById("start-time-input");
+const guessTimeInput = document.getElementById("guess-time-input");
 const stepsList = document.getElementById("steps-list");
 const btnAddStep = document.getElementById("btn-add-step");
 const stepTemplate = document.getElementById("step-template");
 const resultTime = document.getElementById("result-time");
+const deltaRow = document.getElementById("delta-row");
+const deltaValue = document.getElementById("delta-value");
 
 let startMode = "now";
 
@@ -29,6 +32,31 @@ function formatMinutes(totalMinutes) {
   return days > 0 ? `${time} (+${days}j)` : time;
 }
 
+function formatDurationDelta(deltaMinutes) {
+  const sign = deltaMinutes > 0 ? "+" : deltaMinutes < 0 ? "-" : "";
+  const abs = Math.abs(deltaMinutes);
+  const h = Math.floor(abs / 60);
+  const m = abs % 60;
+  return h > 0 ? `${sign}${h} h ${String(m).padStart(2, "0")}` : `${sign}${m} min`;
+}
+
+function isRowFilled(row) {
+  const desc = row.querySelector(".step-desc").value.trim();
+  const hours = row.querySelector(".step-hours").value;
+  const minutes = row.querySelector(".step-minutes").value;
+  return desc !== "" || hours !== "" || minutes !== "";
+}
+
+function handleStepInput(row) {
+  recalculate();
+  saveState();
+
+  const isLastRow = row === stepsList.lastElementChild;
+  if (isLastRow && isRowFilled(row)) {
+    addStepRow();
+  }
+}
+
 function addStepRow(data) {
   const fragment = stepTemplate.content.cloneNode(true);
   const row = fragment.querySelector(".step-row");
@@ -44,10 +72,7 @@ function addStepRow(data) {
   }
 
   [desc, hours, minutes].forEach((el) => {
-    el.addEventListener("input", () => {
-      recalculate();
-      saveState();
-    });
+    el.addEventListener("input", () => handleStepInput(row));
   });
 
   removeBtn.addEventListener("click", () => {
@@ -82,21 +107,50 @@ function getStartMinutes() {
   return null;
 }
 
+function updateDelta(stepsDurationTotal, startMinutes) {
+  if (!guessTimeInput.value) {
+    deltaRow.classList.add("hidden");
+    return;
+  }
+
+  const guessRaw = parseHHMM(guessTimeInput.value);
+  let guessDuration = guessRaw - startMinutes;
+  if (guessDuration < 0) {
+    guessDuration += 1440;
+  }
+
+  const deltaMinutes = stepsDurationTotal - guessDuration;
+  const percent = guessDuration > 0 ? (deltaMinutes / guessDuration) * 100 : null;
+
+  let text = formatDurationDelta(deltaMinutes);
+  if (percent !== null) {
+    const percentSign = percent > 0 ? "+" : "";
+    text += ` (${percentSign}${percent.toFixed(0)}%)`;
+  }
+
+  deltaRow.classList.remove("hidden");
+  deltaValue.textContent = text;
+  deltaValue.classList.toggle("over", deltaMinutes > 0);
+  deltaValue.classList.toggle("under", deltaMinutes < 0);
+}
+
 function recalculate() {
   const startMinutes = getStartMinutes();
   if (startMinutes === null) {
     resultTime.textContent = "--:--";
+    deltaRow.classList.add("hidden");
     return;
   }
 
-  let total = startMinutes;
+  let stepsDurationTotal = 0;
   stepsList.querySelectorAll(".step-row").forEach((row) => {
     const h = parseInt(row.querySelector(".step-hours").value, 10) || 0;
     const m = parseInt(row.querySelector(".step-minutes").value, 10) || 0;
-    total += h * 60 + m;
+    stepsDurationTotal += h * 60 + m;
   });
 
-  resultTime.textContent = formatMinutes(total);
+  resultTime.textContent = formatMinutes(startMinutes + stepsDurationTotal);
+  updateDelta(stepsDurationTotal, startMinutes);
 }
 
 function saveState() {
@@ -111,6 +165,7 @@ function saveState() {
     JSON.stringify({
       startMode,
       manualStartTime: startTimeInput.value,
+      guessTime: guessTimeInput.value,
       steps,
     })
   );
@@ -128,6 +183,9 @@ function loadState() {
     if (state.manualStartTime) {
       startTimeInput.value = state.manualStartTime;
     }
+    if (state.guessTime) {
+      guessTimeInput.value = state.guessTime;
+    }
     setStartMode(state.startMode === "manual" ? "manual" : "now");
 
     if (Array.isArray(state.steps) && state.steps.length > 0) {
@@ -143,6 +201,10 @@ function loadState() {
 btnNow.addEventListener("click", () => setStartMode("now"));
 btnManual.addEventListener("click", () => setStartMode("manual"));
 startTimeInput.addEventListener("input", () => {
+  recalculate();
+  saveState();
+});
+guessTimeInput.addEventListener("input", () => {
   recalculate();
   saveState();
 });

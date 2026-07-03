@@ -21,6 +21,12 @@
 
 <main>
   <section class="card">
+    <h2>Guess</h2>
+    <p class="card-hint">Ton estimation de l'heure de fin</p>
+    <input type="time" id="guess-time-input" class="time-input">
+  </section>
+
+  <section class="card">
     <h2>Heure de départ</h2>
     <div class="start-toggle">
       <button id="btn-now" class="toggle-btn active" type="button">Maintenant</button>
@@ -39,8 +45,14 @@
 </main>
 
 <footer class="result-bar">
-  <div class="result-label">Heure d'arrivée</div>
-  <div id="result-time" class="result-time">--:--</div>
+  <div class="result-main">
+    <div class="result-label">Heure d'arrivée</div>
+    <div id="result-time" class="result-time">--:--</div>
+  </div>
+  <div id="delta-row" class="delta-row hidden">
+    <span class="delta-label">Écart vs guess</span>
+    <span id="delta-value" class="delta-value">--</span>
+  </div>
 </footer>
 
 <template id="step-template">
