@@ -225,7 +225,36 @@ setInterval(() => {
 }, 15000);
 
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js").catch(() => {});
+  window.addEventListener("load", async () => {
+    try {
+      const reg = await navigator.serviceWorker.register("service-worker.js", {
+        updateViaCache: "none",
+      });
+
+      reg.addEventListener("updatefound", () => {
+        const newWorker = reg.installing;
+        newWorker?.addEventListener("statechange", () => {
+          if (newWorker.state === "activated") {
+            window.location.reload();
+          }
+        });
+      });
+
+      reg.update();
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") {
+          reg.update();
+        }
+      });
+    } catch {
+      // service worker unavailable, app still works without offline caching
+    }
+  });
+
+  let hasReloaded = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (hasReloaded) return;
+    hasReloaded = true;
+    window.location.reload();
   });
 }
