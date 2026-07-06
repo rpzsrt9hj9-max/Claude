@@ -4,103 +4,77 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#111318">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Isolation">
-<title>Simulateur d'isolation thermique</title>
-<link rel="icon" href="icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="style.css">
+<title>Mes petites applications</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #111318;
+    --card: #1b1e26;
+    --card-border: #2a2e38;
+    --text: #f2f3f5;
+    --muted: #9aa0ac;
+    --accent: #5b8cff;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    min-height: 100vh;
+  }
+  header {
+    padding: calc(env(safe-area-inset-top) + 24px) 20px 8px;
+  }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .subtitle { color: var(--muted); font-size: 14px; margin: 0; }
+  main {
+    padding: 16px; max-width: 720px; margin: 0 auto;
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  a.app-card {
+    display: block;
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: 16px;
+    padding: 18px;
+    text-decoration: none;
+    color: var(--text);
+  }
+  a.app-card:hover { border-color: var(--accent); }
+  .app-title { font-size: 17px; font-weight: 600; margin: 0 0 6px; }
+  .app-desc { color: var(--muted); font-size: 14px; margin: 0; line-height: 1.5; }
+  .app-links { margin-top: 10px; display: flex; gap: 14px; flex-wrap: wrap; }
+  .app-links span { color: var(--accent); font-size: 13px; }
+</style>
 </head>
 <body>
 
-<header class="topbar">
-  <h1>Simulateur d'isolation thermique</h1>
-  <p class="subtitle">Onde de température sinusoïdale à travers une paroi (régime périodique établi, milieu semi-infini)</p>
-  <a class="version-link" href="v2/index.html">Comparer plusieurs solutions multicouches (V2) →</a>
+<header>
+  <h1>Mes petites applications</h1>
+  <p class="subtitle">Toutes hébergées sur ce même site, développées branche par branche.</p>
 </header>
 
 <main>
-  <section class="card">
-    <h2>Température extérieure</h2>
-    <div class="field-row">
-      <label for="t-max">Température maximale (°C)</label>
-      <input type="number" id="t-max" value="30" step="0.5">
+  <a class="app-card" href="isolation/index.html">
+    <p class="app-title">Simulateur d'isolation thermique</p>
+    <p class="app-desc">
+      Onde de température sinusoïdale à travers une paroi : température extérieure vs
+      température de surface intérieure de l'isolant, avec déphasage et amortissement.
+    </p>
+    <div class="app-links">
+      <span>→ V1 : paroi simple</span>
+      <span>→ V2 : comparaison de solutions multicouches (isolation/v2/)</span>
     </div>
-    <div class="field-row">
-      <label for="h-max">Heure du maximum</label>
-      <input type="number" id="h-max" value="15" min="0" max="23" step="1">
-    </div>
-    <div class="field-row">
-      <label for="t-min">Température minimale (°C)</label>
-      <input type="number" id="t-min" value="14" step="0.5">
-    </div>
-    <p class="card-hint">L'heure du minimum est automatique : heure du maximum + 12h (cycle de 24h).</p>
-  </section>
+  </a>
 
-  <section class="card">
-    <h2>Isolant</h2>
-    <div class="field-row">
-      <label for="preset">Matériau (préréglage)</label>
-      <select id="preset"></select>
-    </div>
-    <div class="field-row">
-      <label for="lambda">Conductivité thermique λ (W/m.K)</label>
-      <input type="number" id="lambda" step="0.001">
-    </div>
-    <div class="field-row">
-      <label for="rho">Masse volumique ρ (kg/m³)</label>
-      <input type="number" id="rho" step="1">
-    </div>
-    <div class="field-row">
-      <label for="cp">Chaleur spécifique Cp (J/kg.K)</label>
-      <input type="number" id="cp" step="10">
-    </div>
-    <div class="field-row">
-      <label for="thickness">Épaisseur (cm)</label>
-      <input type="number" id="thickness" value="20" step="1" min="0.1">
-    </div>
-  </section>
-
-  <section class="card results-card">
-    <h2>Résultats</h2>
-    <div class="result-grid">
-      <div class="result-item">
-        <span class="result-item-label">Résistance thermique R</span>
-        <span class="result-item-value" id="res-r">–</span>
-      </div>
-      <div class="result-item">
-        <span class="result-item-label">Diffusivité α</span>
-        <span class="result-item-value" id="res-alpha">–</span>
-      </div>
-      <div class="result-item">
-        <span class="result-item-label">Profondeur de pénétration δ</span>
-        <span class="result-item-value" id="res-delta">–</span>
-      </div>
-      <div class="result-item">
-        <span class="result-item-label">Amortissement (atténuation)</span>
-        <span class="result-item-value" id="res-damping">–</span>
-      </div>
-      <div class="result-item">
-        <span class="result-item-label">Déphasage</span>
-        <span class="result-item-value" id="res-phase">–</span>
-      </div>
-      <div class="result-item">
-        <span class="result-item-label">Amplitude intérieure résultante</span>
-        <span class="result-item-value" id="res-amplitude">–</span>
-      </div>
-    </div>
-  </section>
-
-  <section class="card chart-card">
-    <h2>Courbes sur 48h (2 cycles de 24h)</h2>
-    <div class="legend">
-      <span class="legend-item"><span class="swatch swatch-ext"></span>Température extérieure (surface externe de l'isolant)</span>
-      <span class="legend-item"><span class="swatch swatch-int"></span>Température intérieure (surface interne de l'isolant)</span>
-    </div>
-    <canvas id="chart" width="900" height="420"></canvas>
-  </section>
+  <a class="app-card" href="horaires/index.html">
+    <p class="app-title">Calculateur d'horaires</p>
+    <p class="app-desc">
+      Estime ton heure d'arrivée à partir d'une heure de départ et d'une liste d'étapes,
+      avec comparaison à ton estimation ("guess").
+    </p>
+  </a>
 </main>
 
-<script src="app.js"></script>
 </body>
 </html>

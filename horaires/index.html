@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#111318">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Horaires">
+<title>Calculateur d'horaires</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <h1>Calculateur d'horaires</h1>
+</header>
+
+<main>
+  <section class="card">
+    <h2>Guess</h2>
+    <p class="card-hint">Ton estimation de l'heure de fin</p>
+    <input type="time" id="guess-time-input" class="time-input">
+  </section>
+
+  <section class="card">
+    <h2>Heure de départ</h2>
+    <div class="start-toggle">
+      <button id="btn-now" class="toggle-btn active" type="button">Maintenant</button>
+      <button id="btn-manual" class="toggle-btn" type="button">Manuel</button>
+    </div>
+    <input type="time" id="start-time-input" class="time-input" disabled>
+  </section>
+
+  <section class="card">
+    <div class="steps-header">
+      <h2>Étapes</h2>
+      <button id="btn-add-step" class="add-btn" type="button">+ Ajouter une ligne</button>
+    </div>
+    <ul id="steps-list" class="steps-list"></ul>
+  </section>
+</main>
+
+<footer class="result-bar">
+  <div class="result-main">
+    <div class="result-label">Heure d'arrivée</div>
+    <div id="result-time" class="result-time">--:--</div>
+  </div>
+  <div id="delta-row" class="delta-row hidden">
+    <span class="delta-label">Écart vs guess</span>
+    <span id="delta-value" class="delta-value">--</span>
+  </div>
+</footer>
+
+<template id="step-template">
+  <li class="step-row">
+    <input type="text" class="step-desc" placeholder="Description (ex : trajet vélo)">
+    <div class="step-duration">
+      <input type="number" class="step-hours" min="0" inputmode="numeric" placeholder="0" aria-label="Heures">
+      <span class="duration-unit">h</span>
+      <input type="number" class="step-minutes" min="0" max="59" inputmode="numeric" placeholder="0" aria-label="Minutes">
+      <span class="duration-unit">min</span>
+    </div>
+    <button class="step-remove" type="button" aria-label="Supprimer la ligne">✕</button>
+  </li>
+</template>
+
+<script src="app.js"></script>
+</body>
+</html>
