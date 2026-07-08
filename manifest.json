@@ -1,6 +1,6 @@
 {
-  "name": "Calculateur d'horaires",
-  "short_name": "Horaires",
+  "name": "Calculateur de prêt immobilier",
+  "short_name": "Prêt immo",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#111318",
