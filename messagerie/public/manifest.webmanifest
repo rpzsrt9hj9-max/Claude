@@ -1,0 +1,12 @@
+{
+  "name": "Messagerie familiale",
+  "short_name": "Famille",
+  "description": "Messagerie familiale chiffrée de bout en bout",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f2f0eb",
+  "theme_color": "#1b3a4b",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

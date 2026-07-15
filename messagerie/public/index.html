@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Messagerie familiale</title>
+<meta name="description" content="Messagerie familiale chiffrée de bout en bout">
+<link rel="stylesheet" href="style.css">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#1b3a4b">
+</head>
+<body>
+
+<!-- ============ Écran de connexion / inscription ============ -->
+<div id="auth-view" class="auth-view hidden">
+  <div class="auth-card">
+    <div class="auth-logo">🏡🔐</div>
+    <h1>Messagerie familiale</h1>
+    <p class="auth-sub">Chiffrée de bout en bout — vos messages ne sont lisibles que par la famille.</p>
+
+    <form id="login-form" class="hidden" autocomplete="on">
+      <label>Pseudonyme
+        <input id="login-username" type="text" autocomplete="username" required maxlength="20">
+      </label>
+      <label>Phrase secrète
+        <input id="login-passphrase" type="password" autocomplete="current-password" required>
+      </label>
+      <button type="submit" class="btn-primary" id="login-btn">Se connecter</button>
+      <p class="auth-error hidden" id="login-error"></p>
+    </form>
+
+    <form id="unlock-form" class="hidden">
+      <p>Bonjour <strong id="unlock-username"></strong> ! Entrez votre phrase secrète pour déverrouiller vos messages.</p>
+      <label>Phrase secrète
+        <input id="unlock-passphrase" type="password" autocomplete="current-password" required>
+      </label>
+      <button type="submit" class="btn-primary" id="unlock-btn">Déverrouiller</button>
+      <button type="button" class="btn-link" id="unlock-logout">Changer de compte</button>
+      <p class="auth-error hidden" id="unlock-error"></p>
+    </form>
+
+    <form id="register-form" class="hidden">
+      <p class="invite-banner">🎟️ Vous êtes invité·e par <strong id="invite-by"></strong> à rejoindre la messagerie familiale.</p>
+      <label>Choisissez un pseudonyme
+        <input id="register-username" type="text" autocomplete="username" required maxlength="20"
+               placeholder="ex. : Mamie, Léa…">
+      </label>
+      <label>Choisissez une phrase secrète
+        <input id="register-passphrase" type="password" autocomplete="new-password" required
+               placeholder="4 mots ou plus, facile à retenir">
+      </label>
+      <label>Confirmez la phrase secrète
+        <input id="register-passphrase2" type="password" autocomplete="new-password" required>
+      </label>
+      <p class="hint">⚠️ La phrase secrète protège vos clés de chiffrement. Elle n'est jamais envoyée au serveur
+        et <strong>ne peut pas être récupérée en cas d'oubli</strong>. Choisissez par exemple 4 à 5 mots au hasard.</p>
+      <button type="submit" class="btn-primary" id="register-btn">Créer mon compte</button>
+      <p class="auth-error hidden" id="register-error"></p>
+    </form>
+
+    <p id="invite-invalid" class="auth-error hidden">Cette invitation est invalide ou a expiré. Demandez un nouveau lien à un membre de la famille.</p>
+  </div>
+</div>
+
+<!-- ============ Application principale ============ -->
+<div id="main-view" class="main-view hidden">
+  <aside id="sidebar" class="sidebar">
+    <header class="sidebar-header">
+      <span class="me" id="me-name"></span>
+      <div class="sidebar-actions">
+        <button id="btn-new-convo" title="Nouvelle conversation">✏️</button>
+        <button id="btn-invite" title="Inviter un membre de la famille">🎟️</button>
+        <button id="btn-profile" title="Sécurité et compte">🛡️</button>
+      </div>
+    </header>
+    <ul id="convo-list" class="convo-list"></ul>
+    <p id="convo-empty" class="convo-empty hidden">Aucune conversation.<br>Créez-en une avec ✏️</p>
+  </aside>
+
+  <section id="chat" class="chat">
+    <div id="chat-placeholder" class="chat-placeholder">
+      <p>🏡 Choisissez une conversation<br>ou créez-en une nouvelle.</p>
+    </div>
+    <div id="chat-active" class="hidden chat-active">
+      <header class="chat-header">
+        <button id="btn-back" class="btn-back">←</button>
+        <div>
+          <div class="chat-title" id="chat-title"></div>
+          <div class="chat-members" id="chat-members"></div>
+        </div>
+      </header>
+      <div id="messages" class="messages"></div>
+      <footer class="composer">
+        <button id="btn-photo" title="Envoyer une photo">📷</button>
+        <input id="photo-input" type="file" accept="image/*" class="hidden">
+        <button id="btn-voice" title="Message vocal">🎤</button>
+        <textarea id="msg-input" rows="1" placeholder="Message…" maxlength="4000"></textarea>
+        <button id="btn-send" title="Envoyer">➤</button>
+      </footer>
+      <div id="recording-bar" class="recording-bar hidden">
+        <span class="rec-dot"></span> Enregistrement… <span id="rec-time">0:00</span>
+        <button id="btn-rec-cancel">Annuler</button>
+        <button id="btn-rec-send" class="btn-primary">Envoyer</button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- ============ Fenêtres modales ============ -->
+<div id="modal-backdrop" class="modal-backdrop hidden">
+  <div class="modal" id="modal-new-convo" role="dialog" aria-modal="true">
+    <h2>Nouvelle conversation</h2>
+    <label>Nom (facultatif pour un duo)
+      <input id="nc-name" type="text" maxlength="60" placeholder="ex. : Toute la famille">
+    </label>
+    <p>Participants :</p>
+    <div id="nc-members" class="member-picker"></div>
+    <p class="auth-error hidden" id="nc-error"></p>
+    <div class="modal-actions">
+      <button class="btn-link modal-close">Annuler</button>
+      <button class="btn-primary" id="nc-create">Créer</button>
+    </div>
+  </div>
+
+  <div class="modal hidden" id="modal-invite" role="dialog" aria-modal="true">
+    <h2>Inviter un membre de la famille</h2>
+    <p>Envoyez ce lien à la personne (par un canal de confiance). Il est à usage unique et expire dans 7 jours.</p>
+    <div class="invite-link-box"><code id="invite-link"></code></div>
+    <div class="modal-actions">
+      <button class="btn-link modal-close">Fermer</button>
+      <button class="btn-primary" id="invite-copy">Copier le lien</button>
+    </div>
+  </div>
+
+  <div class="modal hidden" id="modal-profile" role="dialog" aria-modal="true">
+    <h2>Sécurité et compte</h2>
+    <p>Connecté·e en tant que <strong id="profile-name"></strong></p>
+    <h3>Empreinte de sécurité</h3>
+    <p class="hint">Comparez ces chiffres de vive voix (téléphone, en personne) avec ceux affichés chez les autres membres,
+      dans la liste ci-dessous. S'ils correspondent, personne ne peut intercepter vos messages.</p>
+    <div class="fingerprint" id="my-fingerprint"></div>
+    <h3>Empreintes de la famille</h3>
+    <ul id="family-fingerprints" class="family-fp"></ul>
+    <div class="modal-actions">
+      <button class="btn-link" id="btn-logout">Se déconnecter</button>
+      <button class="btn-primary modal-close">Fermer</button>
+    </div>
+  </div>
+</div>
+
+<script src="crypto.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
