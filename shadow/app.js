@@ -12,12 +12,30 @@ const MOVES = [
   {n:11, cat:'knee', name:'Genou', side:'', esquive:'Créer la distance / bloc hanches'},
   {n:12, cat:'knee', name:'Teep', side:'', esquive:'Dévier / pas de côté'},
 ];
+const MOVES_BY_N = new Map(MOVES.map(m => [m.n, m]));
 
 const JAB_N = 1;
 // À 100 %, le jab ouvre systématiquement un combo de 2 coups ou plus,
 // et représente 70 % des frappes restantes (dont les appels d'un seul coup).
 const JAB_LEAD_MAX = 1.0;
 const JAB_SHARE_MAX = 0.7;
+
+// Combos classiques (numérotation boxe/Muay Thai standard : 1 jab, 2 direct,
+// 3 crochet avant, 4 crochet arrière, 5 uppercut avant, 6 uppercut arrière,
+// puis les low kicks/kicks/genou de la même table de coups).
+const CLASSIC_COMBOS = [
+  { seq:[1,2], label:'Jab – Direct (le "one-two")' },
+  { seq:[1,1,2], label:'Jab – Jab – Direct' },
+  { seq:[1,2,3], label:'Jab – Direct – Crochet avant' },
+  { seq:[1,2,3,2], label:'Jab – Direct – Crochet avant – Direct' },
+  { seq:[2,3,2], label:'Direct – Crochet avant – Direct' },
+  { seq:[1,2,5], label:'Jab – Direct – Uppercut avant' },
+  { seq:[1,2,8], label:'Jab – Direct – Low kick arrière' },
+  { seq:[1,2,3,8], label:'Jab – Direct – Crochet avant – Low kick arrière' },
+  { seq:[1,2,9], label:'Jab – Direct – Kick au corps' },
+  { seq:[3,2,8], label:'Crochet avant – Direct – Low kick arrière' },
+  { seq:[4,3,2], label:'Crochet arrière ("du droit" en garde orthodoxe) – Crochet avant – Direct' },
+];
 
 let activeCats = new Set(['poings','lowkick','kickmid','knee']);
 let running = false;
@@ -27,7 +45,9 @@ let sessionEndTime = null;
 let clockInterval = null;
 let keepAliveInterval = null;
 let voiceOn = true;
+let voiceNameOn = true;
 let nameOn = true;
+let southpaw = false;
 let audioUnlocked = false;
 
 const callNumberEl = document.getElementById('callNumber');
@@ -51,6 +71,17 @@ function buildLegend(){
 }
 buildLegend();
 
+function buildClassicLegend(){
+  const table = document.getElementById('classicTable');
+  table.innerHTML = CLASSIC_COMBOS.map(c => `
+    <div class="legend-item">
+      <div class="n" style="width:auto; min-width:70px; white-space:nowrap;">${c.seq.join('-')}</div>
+      <div class="name">${c.label}</div>
+    </div>
+  `).join('');
+}
+buildClassicLegend();
+
 document.querySelectorAll('.chip').forEach(chip => {
   chip.addEventListener('click', () => {
     const cat = chip.dataset.cat;
@@ -63,6 +94,7 @@ document.querySelectorAll('.chip').forEach(chip => {
       chip.classList.add('active');
     }
     syncJabPanel();
+    syncClassicPanel();
   });
 });
 
@@ -76,38 +108,52 @@ function bindSwitch(id, setter, initial){
   });
 }
 bindSwitch('voiceToggle', v => voiceOn = v, true);
+bindSwitch('voiceNameToggle', v => voiceNameOn = v, true);
 bindSwitch('nameToggle', v => nameOn = v, true);
+bindSwitch('stanceToggle', v => southpaw = v, false);
 
 const minGap = document.getElementById('minGap');
 const maxGap = document.getElementById('maxGap');
+const comboGapMin = document.getElementById('comboGapMin');
+const comboGapMax = document.getElementById('comboGapMax');
 const comboMin = document.getElementById('comboMin');
 const comboMax = document.getElementById('comboMax');
 const jabBias = document.getElementById('jabBias');
+const classicChance = document.getElementById('classicChance');
 const sessionDur = document.getElementById('sessionDur');
 const minGapVal = document.getElementById('minGapVal');
 const maxGapVal = document.getElementById('maxGapVal');
+const comboGapMinVal = document.getElementById('comboGapMinVal');
+const comboGapMaxVal = document.getElementById('comboGapMaxVal');
 const comboMinVal = document.getElementById('comboMinVal');
 const comboMaxVal = document.getElementById('comboMaxVal');
 const comboHint = document.getElementById('comboHint');
 const jabBiasVal = document.getElementById('jabBiasVal');
 const jabHint = document.getElementById('jabHint');
 const jabPanel = jabBias.closest('.panel');
+const classicChanceVal = document.getElementById('classicChanceVal');
+const classicHint = document.getElementById('classicHint');
 const sessionDurVal = document.getElementById('sessionDurVal');
 
 function fmtGap(v){ return (v/10).toFixed(1) + ' s'; }
 function fmtCoups(n){ return n + (n === 1 ? ' coup' : ' coups'); }
 
+function clampPair(loEl, hiEl, lastTouched){
+  if(parseInt(loEl.value) > parseInt(hiEl.value)){
+    if(lastTouched === hiEl) loEl.value = hiEl.value;
+    else hiEl.value = loEl.value;
+  }
+}
+
 function syncSliders(lastTouched){
-  if(parseInt(minGap.value) > parseInt(maxGap.value)){
-    if(lastTouched === maxGap) minGap.value = maxGap.value;
-    else maxGap.value = minGap.value;
-  }
-  if(parseInt(comboMin.value) > parseInt(comboMax.value)){
-    if(lastTouched === comboMax) comboMin.value = comboMax.value;
-    else comboMax.value = comboMin.value;
-  }
+  clampPair(minGap, maxGap, lastTouched);
+  clampPair(comboGapMin, comboGapMax, lastTouched);
+  clampPair(comboMin, comboMax, lastTouched);
+
   minGapVal.textContent = fmtGap(minGap.value);
   maxGapVal.textContent = fmtGap(maxGap.value);
+  comboGapMinVal.textContent = fmtGap(comboGapMin.value);
+  comboGapMaxVal.textContent = fmtGap(comboGapMax.value);
 
   const lo = parseInt(comboMin.value);
   const hi = parseInt(comboMax.value);
@@ -119,6 +165,9 @@ function syncSliders(lastTouched){
 
   jabBiasVal.textContent = jabBias.value + ' %';
   syncJabPanel();
+
+  classicChanceVal.textContent = classicChance.value + ' %';
+  syncClassicPanel();
 
   const d = parseInt(sessionDur.value);
   sessionDurVal.textContent = d === 0 ? 'Illimitée' : d + ' min';
@@ -145,7 +194,21 @@ function syncJabPanel(){
   }
 }
 
-[minGap, maxGap, comboMin, comboMax, jabBias, sessionDur].forEach(el => {
+function syncClassicPanel(){
+  const n = eligibleClassics().length;
+  const v = parseInt(classicChance.value);
+  if(n === 0){
+    classicHint.textContent = "Aucun combo classique dispo avec les catégories de coups actives.";
+    classicHint.classList.add('warn');
+    return;
+  }
+  classicHint.classList.remove('warn');
+  classicHint.textContent = v === 0
+    ? `0 % : jamais de combo classique, uniquement du tirage libre (${n} combos classiques dispo si tu montes le curseur).`
+    : `${v} % de chances qu'un combo entier soit pioché tel quel parmi ${n} combos classiques (jab-direct-uppercut, jab-direct-low kick, crochet arrière-crochet-direct, etc.) plutôt que généré coup par coup.`;
+}
+
+[minGap, maxGap, comboGapMin, comboGapMax, comboMin, comboMax, jabBias, classicChance, sessionDur].forEach(el => {
   el.addEventListener('input', () => syncSliders(el));
 });
 
@@ -190,8 +253,8 @@ testSoundBtn.addEventListener('click', () => {
     return;
   }
   unlockAudio();
-  setTimeout(() => speak('Un, deux, trois'), 150);
-  soundNote.textContent = 'Tu devrais entendre "un, deux, trois". Si rien ne sort, vérifie le volume / mode silencieux du téléphone.';
+  setTimeout(() => speak('Un, jab du gauche, deux, direct du droit'), 150);
+  soundNote.textContent = 'Tu devrais entendre "un, jab du gauche, deux, direct du droit". Si rien ne sort, vérifie le volume / mode silencieux du téléphone.';
   soundNote.classList.remove('warn');
 });
 
@@ -207,6 +270,38 @@ function stopKeepAlive(){ clearInterval(keepAliveInterval); }
 
 function pool(){
   return MOVES.filter(m => activeCats.has(m.cat));
+}
+
+// Un coup "de jambe avant" ou "arrière" désigne la main/jambe qui l'exécute,
+// indépendamment du nom affiché ("Low kick" ne porte pas "avant/arrière").
+function sideKey(side){
+  if(!side) return '';
+  return /arrière/i.test(side) ? 'arriere' : 'avant';
+}
+
+// gauche/droit dépend de la garde : en garde orthodoxe (par défaut), le côté
+// "avant" est la gauche ; en garde gauchère (southpaw), c'est l'inverse.
+function sideDisplay(side){
+  const key = sideKey(side);
+  if(!key) return '';
+  const front = southpaw ? 'Droite' : 'Gauche';
+  const back = southpaw ? 'Gauche' : 'Droite';
+  return key === 'avant' ? front : back;
+}
+function sideSpoken(side){
+  const key = sideKey(side);
+  if(!key) return '';
+  const front = southpaw ? 'du droit' : 'du gauche';
+  const back = southpaw ? 'du gauche' : 'du droit';
+  return key === 'avant' ? front : back;
+}
+function baseVoiceName(m){
+  return m.name.replace(/\s+(avant|arrière)$/i, '').toLowerCase();
+}
+function voicePhrase(m){
+  if(!voiceNameOn) return String(m.n);
+  const spoken = sideSpoken(m.side);
+  return spoken ? `${m.n}, ${baseVoiceName(m)} ${spoken}` : `${m.n}, ${baseVoiceName(m)}`;
 }
 
 // Part du jab pour une frappe donnée : on interpole entre sa part naturelle
@@ -232,9 +327,22 @@ function pickMove(isLead, comboLength){
   return from[Math.floor(Math.random() * from.length)];
 }
 
+function eligibleClassics(){
+  return CLASSIC_COMBOS.filter(c => c.seq.every(n => {
+    const mv = MOVES_BY_N.get(n);
+    return mv && activeCats.has(mv.cat);
+  }));
+}
+
 function randomGapMs(){
   const lo = parseInt(minGap.value) * 100;
   const hi = parseInt(maxGap.value) * 100;
+  return lo + Math.random() * (hi - lo);
+}
+
+function comboGapMs(){
+  const lo = parseInt(comboGapMin.value) * 100;
+  const hi = parseInt(comboGapMax.value) * 100;
   return lo + Math.random() * (hi - lo);
 }
 
@@ -250,8 +358,8 @@ function flashCall(m){
   void callNumberEl.offsetWidth;
   callNumberEl.classList.add('hit');
   callNameEl.textContent = nameOn ? m.name : '';
-  callSideEl.textContent = nameOn && m.side ? m.side : '';
-  speak(String(m.n));
+  callSideEl.textContent = nameOn ? sideDisplay(m.side) : '';
+  speak(voicePhrase(m));
 }
 
 function sessionOver(){
@@ -262,19 +370,31 @@ function fireCombo(){
   if(!running || sessionOver()){ if(sessionOver()) endSession(); return; }
   const p = pool();
   if(p.length === 0) return;
-  const len = randomComboLength();
-  const combo = [];
-  for(let i=0;i<len;i++){
-    combo.push(pickMove(i === 0, len));
+
+  const classics = eligibleClassics();
+  const useClassic = classics.length > 0 && Math.random() < (parseInt(classicChance.value) / 100);
+  let combo, comboLabel;
+  if(useClassic){
+    const chosen = classics[Math.floor(Math.random() * classics.length)];
+    combo = chosen.seq.map(n => MOVES_BY_N.get(n));
+    comboLabel = chosen.label;
+  } else {
+    const len = randomComboLength();
+    combo = [];
+    for(let i=0;i<len;i++){
+      combo.push(pickMove(i === 0, len));
+    }
+    comboLabel = null;
   }
+
   let i = 0;
-  statusEl.textContent = 'Ça arrive';
+  statusEl.textContent = comboLabel || 'Ça arrive';
   function step(){
     if(!running || sessionOver()){ if(sessionOver()) endSession(); return; }
     flashCall(combo[i]);
     i++;
     if(i < combo.length){
-      // random timing between two strikes, same range whether inside or between combos
+      // délai entre deux frappes du même combo (réglage "Cadence entre chaque frappe")
       timerId = setTimeout(step, randomGapMs());
     } else {
       statusEl.textContent = 'Reset';
@@ -286,7 +406,8 @@ function fireCombo(){
 
 function scheduleNext(){
   if(!running || sessionOver()){ if(sessionOver()) endSession(); return; }
-  timerId = setTimeout(fireCombo, randomGapMs());
+  // délai avant le prochain combo (réglage "Délai entre les combos")
+  timerId = setTimeout(fireCombo, comboGapMs());
 }
 
 function startClock(){
@@ -324,7 +445,7 @@ function start(){
   sessionEndTime = durMin === 0 ? null : Date.now() + durMin*60000;
   startClock();
   startKeepAlive();
-  timerId = setTimeout(fireCombo, randomGapMs());
+  timerId = setTimeout(fireCombo, comboGapMs());
 }
 
 function stop(){

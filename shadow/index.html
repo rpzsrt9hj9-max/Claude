@@ -56,7 +56,22 @@
       <input type="range" id="maxGap" min="3" max="60" step="1" value="28">
       <div class="val" id="maxGapVal">2.8 s</div>
     </div>
-    <p class="hint">Chaque frappe tombe à un délai tiré au hasard dans cet intervalle, aussi bien à l'intérieur d'un combo qu'entre deux combos.</p>
+    <p class="hint">Délai entre deux frappes à l'intérieur d'un même combo.</p>
+  </div>
+
+  <div class="panel">
+    <h2>Délai entre les combos</h2>
+    <div class="row">
+      <label>Intervalle min</label>
+      <input type="range" id="comboGapMin" min="10" max="100" step="1" value="20">
+      <div class="val" id="comboGapMinVal">2.0 s</div>
+    </div>
+    <div class="row">
+      <label>Intervalle max</label>
+      <input type="range" id="comboGapMax" min="10" max="100" step="1" value="50">
+      <div class="val" id="comboGapMaxVal">5.0 s</div>
+    </div>
+    <p class="hint">Une fois un combo terminé, le suivant part après un délai tiré au hasard dans cet intervalle (réglable de 1 à 10 s).</p>
   </div>
 
   <div class="panel">
@@ -85,6 +100,16 @@
   </div>
 
   <div class="panel">
+    <h2>Combos classiques</h2>
+    <div class="row">
+      <label>Fréquence</label>
+      <input type="range" id="classicChance" min="0" max="100" step="5" value="40">
+      <div class="val" id="classicChanceVal">40 %</div>
+    </div>
+    <p class="hint" id="classicHint"></p>
+  </div>
+
+  <div class="panel">
     <h2>Coups actifs</h2>
     <div class="chips" id="chipRow">
       <div class="chip active" data-cat="poings">Poings (1–6)</div>
@@ -97,14 +122,27 @@
       <div class="switch on" id="voiceToggle"></div>
     </div>
     <div class="toggle-row">
+      <span>Annoncer le nom à l'oral</span>
+      <div class="switch on" id="voiceNameToggle"></div>
+    </div>
+    <div class="toggle-row">
       <span>Afficher le nom du coup</span>
       <div class="switch on" id="nameToggle"></div>
+    </div>
+    <div class="toggle-row">
+      <span>Garde gauchère (droite devant)</span>
+      <div class="switch" id="stanceToggle"></div>
     </div>
   </div>
 
   <details>
     <summary>Numérotation de référence</summary>
     <div class="legend-table" id="legendTable"></div>
+  </details>
+
+  <details>
+    <summary>Combos classiques inclus</summary>
+    <div class="legend-table" id="classicTable"></div>
   </details>
 
   <footer>Chaque appel = un coup qui arrive. Ta réaction : esquive, blocage ou déplacement.</footer>
