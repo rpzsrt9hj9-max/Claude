@@ -1,0 +1,544 @@
+:root {
+  color-scheme: dark;
+  --bg: #111318;
+  --card: #1b1e26;
+  --card-border: #2a2e38;
+  --text: #f2f3f5;
+  --muted: #9aa0ac;
+  --accent: #5b8cff;
+  --accent-text: #0b0d12;
+  --danger: #ff5b6a;
+  --ok: #4cd97b;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+body {
+  padding-bottom: calc(84px + env(safe-area-inset-bottom));
+  min-height: 100vh;
+}
+
+body.composer-open {
+  padding-bottom: calc(140px + env(safe-area-inset-bottom));
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* ---------- Barre du haut ---------- */
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: calc(env(safe-area-inset-top) + 14px) 16px 8px;
+}
+
+.topbar h1 {
+  font-size: 20px;
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.topbar-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.icon-btn {
+  border: 1px solid var(--card-border);
+  background: var(--card);
+  color: var(--text);
+  border-radius: 10px;
+  font-size: 17px;
+  padding: 7px 12px;
+}
+
+.icon-btn.danger {
+  color: var(--danger);
+}
+
+.icon-btn.accent {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* ---------- Contenu ---------- */
+
+main {
+  padding: 8px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: 16px;
+  padding: 14px;
+}
+
+.card.tappable:active {
+  background: #22262f;
+}
+
+.primary-btn {
+  padding: 13px;
+  border-radius: 12px;
+  border: none;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: 15px;
+  font-weight: 700;
+  width: 100%;
+}
+
+.ghost-btn {
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.empty-hint {
+  color: var(--muted);
+  font-size: 14px;
+  text-align: center;
+  padding: 24px 12px;
+  line-height: 1.5;
+}
+
+/* ---------- Liste des notes ---------- */
+
+.note-card-title {
+  font-size: 16px;
+  font-weight: 700;
+  margin: 0 0 4px;
+}
+
+.note-card-meta {
+  color: var(--muted);
+  font-size: 12px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.note-card-preview {
+  color: var(--muted);
+  font-size: 13px;
+  margin-top: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.badge {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* ---------- Vue note : blocs horodatés ---------- */
+
+.title-input {
+  width: 100%;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--card-border);
+  background: var(--card);
+  color: var(--text);
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.day-sep {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: 6px;
+}
+
+.day-sep::before,
+.day-sep::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--card-border);
+}
+
+.block-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.block-row.done .block-text {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+
+.block-time {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  padding-top: 3px;
+  flex-shrink: 0;
+}
+
+.block-check {
+  width: 20px;
+  height: 20px;
+  margin: 1px 0 0;
+  accent-color: var(--accent);
+  flex-shrink: 0;
+}
+
+.block-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.block-text {
+  font-size: 15px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.block-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+.chip {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+.chip.note-chip {
+  color: var(--muted);
+  border-color: var(--card-border);
+}
+
+.block-edit {
+  width: 100%;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid var(--accent);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 15px;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.block-edit-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+/* ---------- Composeur ---------- */
+
+.composer {
+  position: fixed;
+  bottom: calc(64px + env(safe-area-inset-bottom));
+  left: 0;
+  right: 0;
+  background: var(--card);
+  border-top: 1px solid var(--card-border);
+  padding: 8px 12px 10px;
+}
+
+.composer-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 0 4px 6px;
+}
+
+.composer-clock {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.composer-hint {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.composer-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.composer-toggle {
+  border: 1px solid var(--card-border);
+  background: var(--bg);
+  color: var(--muted);
+  border-radius: 10px;
+  font-size: 18px;
+  padding: 9px 12px;
+}
+
+.composer-toggle.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+
+.composer-input {
+  flex: 1;
+  min-width: 0;
+  padding: 11px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--card-border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 15px;
+  font-family: inherit;
+  resize: none;
+  max-height: 120px;
+}
+
+.composer-send {
+  border: none;
+  background: var(--accent);
+  color: var(--accent-text);
+  border-radius: 10px;
+  font-size: 17px;
+  padding: 10px 14px;
+}
+
+/* ---------- Filtres ---------- */
+
+.filter-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.filter-select {
+  flex: 1;
+  min-width: 120px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid var(--card-border);
+  background: var(--card);
+  color: var(--text);
+  font-size: 14px;
+}
+
+.filter-toggle {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--card-border);
+  background: var(--card);
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.filter-toggle.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ---------- À faire ---------- */
+
+.todo-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.todo-row.done .todo-label {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+
+.todo-label {
+  flex: 1;
+  min-width: 0;
+  font-size: 15px;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.todo-note {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.todo-meta {
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 4px;
+}
+
+/* ---------- Barre d'onglets ---------- */
+
+.tabbar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  background: var(--card);
+  border-top: 1px solid var(--card-border);
+  padding: 6px 4px calc(8px + env(safe-area-inset-bottom));
+}
+
+.tab-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 0;
+}
+
+.tab-btn.active {
+  color: var(--accent);
+}
+
+.tab-icon {
+  font-size: 18px;
+}
+
+/* ---------- Overlay / feuille d'actions ---------- */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: flex-end;
+  z-index: 50;
+}
+
+.sheet {
+  background: var(--card);
+  border-top: 1px solid var(--card-border);
+  border-radius: 18px 18px 0 0;
+  width: 100%;
+  padding: 16px 16px calc(20px + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 75vh;
+  overflow-y: auto;
+}
+
+.sheet-title {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 0 0 4px;
+}
+
+.sheet-btn {
+  padding: 13px;
+  border-radius: 12px;
+  border: 1px solid var(--card-border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 15px;
+  text-align: left;
+}
+
+.sheet-btn.danger {
+  color: var(--danger);
+}
+
+.sheet-btn.accent {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.sheet-input {
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--card-border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 15px;
+}
+
+/* ---------- Toast ---------- */
+
+.toast {
+  position: fixed;
+  bottom: calc(140px + env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: 14px;
+  font-weight: 700;
+  padding: 10px 18px;
+  border-radius: 999px;
+  z-index: 60;
+  max-width: 85vw;
+  text-align: center;
+}
+
+/* ---------- Vue partagée ---------- */
+
+.shared-banner {
+  background: var(--card);
+  border: 1px dashed var(--accent);
+  border-radius: 12px;
+  padding: 12px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}

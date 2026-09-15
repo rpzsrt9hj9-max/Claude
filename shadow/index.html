@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#12100e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Corner">
+<title>Corner — Appel de coups MMA</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Corner Call</h1>
+    <div class="round" id="roundClock">00:00</div>
+  </header>
+
+  <div class="stage">
+    <div class="status" id="status">Prêt</div>
+    <div class="call-number" id="callNumber">–</div>
+    <div class="call-name" id="callName">&nbsp;</div>
+    <div class="call-side" id="callSide">&nbsp;</div>
+  </div>
+
+  <div class="maction">
+    <button class="big" id="mainBtn">Démarrer l'assaut</button>
+  </div>
+  <div class="sound-note" id="soundNote">Teste le son avant de démarrer (certains navigateurs le bloquent tant que tu n'as pas interagi).</div>
+  <div class="maction" style="margin-top:-8px;">
+    <button class="big testsound" id="testSoundBtn" style="max-width:100%;">Tester le son</button>
+  </div>
+
+  <div class="panel">
+    <h2>Session</h2>
+    <div class="row">
+      <label>Durée</label>
+      <input type="range" id="sessionDur" min="0" max="30" step="1" value="0">
+      <div class="val" id="sessionDurVal">Illimitée</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Cadence entre chaque frappe</h2>
+    <div class="row">
+      <label>Intervalle min</label>
+      <input type="range" id="minGap" min="3" max="60" step="1" value="10">
+      <div class="val" id="minGapVal">1.0 s</div>
+    </div>
+    <div class="row">
+      <label>Intervalle max</label>
+      <input type="range" id="maxGap" min="3" max="60" step="1" value="28">
+      <div class="val" id="maxGapVal">2.8 s</div>
+    </div>
+    <p class="hint">Chaque frappe tombe à un délai tiré au hasard dans cet intervalle, aussi bien à l'intérieur d'un combo qu'entre deux combos.</p>
+  </div>
+
+  <div class="panel">
+    <h2>Longueur des combos</h2>
+    <div class="row">
+      <label>Combo min</label>
+      <input type="range" id="comboMin" min="1" max="5" step="1" value="1">
+      <div class="val" id="comboMinVal">1 coup</div>
+    </div>
+    <div class="row">
+      <label>Combo max</label>
+      <input type="range" id="comboMax" min="1" max="5" step="1" value="3">
+      <div class="val" id="comboMaxVal">3 coups</div>
+    </div>
+    <p class="hint" id="comboHint">Chaque combo tire sa longueur au hasard entre 1 et 3 coups.</p>
+  </div>
+
+  <div class="panel">
+    <h2>Prédominance du jab</h2>
+    <div class="row">
+      <label>Dosage</label>
+      <input type="range" id="jabBias" min="0" max="100" step="5" value="50">
+      <div class="val" id="jabBiasVal">50 %</div>
+    </div>
+    <p class="hint" id="jabHint"></p>
+  </div>
+
+  <div class="panel">
+    <h2>Coups actifs</h2>
+    <div class="chips" id="chipRow">
+      <div class="chip active" data-cat="poings">Poings (1–6)</div>
+      <div class="chip active" data-cat="lowkick">Low kicks (7–8)</div>
+      <div class="chip active" data-cat="kickmid">Kicks corps/tête (9–10)</div>
+      <div class="chip active" data-cat="knee">Genoux/Teep (11–12)</div>
+    </div>
+    <div class="toggle-row">
+      <span>Annonce vocale</span>
+      <div class="switch on" id="voiceToggle"></div>
+    </div>
+    <div class="toggle-row">
+      <span>Afficher le nom du coup</span>
+      <div class="switch on" id="nameToggle"></div>
+    </div>
+  </div>
+
+  <details>
+    <summary>Numérotation de référence</summary>
+    <div class="legend-table" id="legendTable"></div>
+  </details>
+
+  <footer>Chaque appel = un coup qui arrive. Ta réaction : esquive, blocage ou déplacement.</footer>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
