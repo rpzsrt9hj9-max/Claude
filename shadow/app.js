@@ -295,6 +295,35 @@ voiceRate.addEventListener('input', () => { syncVoiceParams(); savePref('corner_
 voicePitch.addEventListener('input', () => { syncVoiceParams(); savePref('corner_pitch', voicePitch.value); });
 syncVoiceParams();
 
+// Bouton d'aide "comment avoir une meilleure voix" : les instructions
+// dépendent de l'OS, donc on met en avant celle de l'appareil détecté au
+// lieu de forcer la personne à chercher la bonne dans les trois.
+const voiceHelpBtn = document.getElementById('voiceHelpBtn');
+const voiceHelpPanel = document.getElementById('voiceHelpPanel');
+
+function detectPlatform(){
+  const ua = navigator.userAgent || '';
+  if(/iPhone|iPad|iPod/.test(ua)) return 'ios';
+  if(/Android/.test(ua)) return 'android';
+  return 'desktop';
+}
+
+(function highlightDetectedPlatform(){
+  const os = detectPlatform();
+  const match = voiceHelpPanel.querySelector(`.voice-help-os[data-os="${os}"]`);
+  if(!match) return;
+  match.classList.add('current');
+  match.querySelector('h3').insertAdjacentHTML('beforeend', '<span class="badge">ton appareil</span>');
+  voiceHelpPanel.prepend(match);
+})();
+
+voiceHelpBtn.addEventListener('click', () => {
+  voiceHelpPanel.hidden = !voiceHelpPanel.hidden;
+  voiceHelpBtn.textContent = voiceHelpPanel.hidden
+    ? '🔊 Comment avoir une meilleure voix ?'
+    : '🔊 Masquer les explications';
+});
+
 function speak(text, onend){
   if(!voiceOn || !('speechSynthesis' in window)){ if(onend) onend(); return; }
   speechSynthesis.cancel();

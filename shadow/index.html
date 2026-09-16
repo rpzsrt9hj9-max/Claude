@@ -51,7 +51,24 @@
       <input type="range" id="voicePitch" min="70" max="130" step="5" value="100">
       <div class="val" id="voicePitchVal">1.00×</div>
     </div>
-    <p class="hint">Les voix intégrées au navigateur sonnent souvent robotiques, surtout à haut débit. Sur iPhone : Réglages → Accessibilité → Contenu énoncé → Voix → Français, télécharge une voix "Améliorée"/"Premium" — elle apparaîtra ensuite dans la liste ci-dessus, nettement plus naturelle.</p>
+    <p class="hint">Les voix intégrées au navigateur sonnent souvent robotiques, surtout à haut débit.</p>
+
+    <button type="button" class="link-btn" id="voiceHelpBtn">🔊 Comment avoir une meilleure voix ?</button>
+    <div class="voice-help" id="voiceHelpPanel" hidden>
+      <div class="voice-help-os" data-os="ios">
+        <h3>📱 iPhone / iPad</h3>
+        <p>Réglages → Accessibilité → Contenu énoncé → Voix → Français → télécharge une voix marquée <strong>« Améliorée »</strong> ou <strong>« Premium »</strong> (Océane, Amélie, Thomas...). Reviens ensuite sur cette page, elle apparaît dans la liste ci-dessus.</p>
+      </div>
+      <div class="voice-help-os" data-os="android">
+        <h3>🤖 Android</h3>
+        <p>Paramètres → Système → Langues et saisie → Synthèse vocale → moteur <strong>Google</strong> → Installer les données vocales → Français. Choisis la qualité « réseau » si elle est proposée : bien plus naturelle que la voix hors-ligne.</p>
+      </div>
+      <div class="voice-help-os" data-os="desktop">
+        <h3>💻 Ordinateur</h3>
+        <p>Sous Chrome ou Edge, les voix « Google » (réseau) sont en général déjà disponibles sans rien installer. Si la liste reste pauvre, vérifie les voix de synthèse vocale installées dans les réglages d'accessibilité du système.</p>
+      </div>
+      <p class="hint" style="margin:10px 0 0;">Une fois une meilleure voix installée, reviens dans le menu déroulant ci-dessus pour la choisir — repérable par ☁️ si c'est une voix réseau.</p>
+    </div>
   </div>
 
   <div class="panel">
