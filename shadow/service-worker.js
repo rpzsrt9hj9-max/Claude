@@ -1,4 +1,4 @@
-const CACHE_NAME = "shadow-v6";
+const CACHE_NAME = "shadow-v7";
 const ASSETS = [
   "./",
   "./index.html",
