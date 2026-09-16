@@ -149,6 +149,43 @@ input[type=range]{ flex:1; accent-color: var(--ember); height:4px; min-width:0; 
   color:var(--ember); border:1px solid var(--ember-dim);
   border-radius:10px; padding:2px 8px; font-weight:600;
 }
+
+.combo-list{ display:flex; flex-direction:column; margin:4px 0 14px; }
+.combo-row{
+  display:flex; align-items:center; gap:10px;
+  padding:9px 0; border-top:1px solid var(--line);
+}
+.combo-row:first-child{ border-top:none; }
+.combo-checkbox{
+  accent-color:var(--ember); width:18px; height:18px; flex-shrink:0; cursor:pointer;
+}
+.combo-seq{
+  font-variant-numeric:tabular-nums; font-weight:700; color:var(--ember);
+  font-size:13px; min-width:62px; flex-shrink:0;
+}
+.combo-label{ flex:1; font-size:13px; color:var(--paper); line-height:1.4; }
+.combo-del{
+  background:none; border:none; color:var(--paper-dim);
+  cursor:pointer; font-size:15px; padding:4px 6px; flex-shrink:0; line-height:1;
+}
+.combo-del:hover, .combo-del:active{ color:var(--ember); }
+.combo-empty{ font-size:13px; color:var(--paper-dim); padding:9px 0; }
+
+.combo-add{ margin-top:6px; }
+.combo-add-row{ display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap; }
+.combo-input{
+  flex:1; min-width:110px;
+  background:var(--bg); color:var(--paper);
+  border:1px solid var(--line); border-radius:2px;
+  padding:8px 10px; font-family:inherit; font-size:13px;
+}
+.btn-small{
+  padding:9px 14px; font-family:inherit; font-size:13px; font-weight:700;
+  letter-spacing:0.04em; text-transform:uppercase;
+  border-radius:2px; border:1px solid var(--ember);
+  background:transparent; color:var(--ember); cursor:pointer;
+}
+.btn-small:active{ transform:scale(0.98); background:rgba(232,99,44,0.08); }
 .hint{
   font-size:12px; line-height:1.5; color:var(--paper-dim);
   margin:-4px 0 12px;

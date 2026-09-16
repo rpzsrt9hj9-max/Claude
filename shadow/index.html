@@ -136,13 +136,24 @@
   </div>
 
   <div class="panel">
-    <h2>Combos classiques</h2>
+    <h2>Combos</h2>
     <div class="row">
       <label>Fréquence</label>
       <input type="range" id="classicChance" min="0" max="100" step="5" value="40">
       <div class="val" id="classicChanceVal">40 %</div>
     </div>
     <p class="hint" id="classicHint"></p>
+
+    <div class="combo-list" id="combosList"></div>
+
+    <div class="combo-add">
+      <div class="combo-add-row">
+        <input type="text" id="comboSeqInput" class="combo-input" placeholder="ex : 1-2-8" inputmode="numeric" autocomplete="off">
+        <input type="text" id="comboLabelInput" class="combo-input" placeholder="Nom (optionnel)" autocomplete="off">
+      </div>
+      <button type="button" class="btn-small" id="comboAddBtn">+ Ajouter ce combo</button>
+      <p class="hint" id="comboAddHint">Numéros séparés par des tirets ou virgules (1 à 12, voir la numérotation de référence ci-dessous). Ex : 1-2-8 pour jab, direct, low kick arrière.</p>
+    </div>
   </div>
 
   <div class="panel">
@@ -174,11 +185,6 @@
   <details>
     <summary>Numérotation de référence</summary>
     <div class="legend-table" id="legendTable"></div>
-  </details>
-
-  <details>
-    <summary>Combos classiques inclus</summary>
-    <div class="legend-table" id="classicTable"></div>
   </details>
 
   <footer>Chaque appel = un coup qui arrive. Ta réaction : esquive, blocage ou déplacement.</footer>

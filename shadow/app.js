@@ -58,6 +58,11 @@ const mainBtn = document.getElementById('mainBtn');
 const roundClock = document.getElementById('roundClock');
 const soundNote = document.getElementById('soundNote');
 const testSoundBtn = document.getElementById('testSoundBtn');
+const combosList = document.getElementById('combosList');
+const comboSeqInput = document.getElementById('comboSeqInput');
+const comboLabelInput = document.getElementById('comboLabelInput');
+const comboAddBtn = document.getElementById('comboAddBtn');
+const comboAddHint = document.getElementById('comboAddHint');
 
 function buildLegend(){
   const table = document.getElementById('legendTable');
@@ -71,16 +76,101 @@ function buildLegend(){
 }
 buildLegend();
 
-function buildClassicLegend(){
-  const table = document.getElementById('classicTable');
-  table.innerHTML = CLASSIC_COMBOS.map(c => `
-    <div class="legend-item">
-      <div class="n" style="width:auto; min-width:70px; white-space:nowrap;">${c.seq.join('-')}</div>
-      <div class="name">${c.label}</div>
-    </div>
-  `).join('');
+// ---- Combos (classiques + ajoutés à la main) ----
+//
+// Les combos classiques sont codés en dur (CLASSIC_COMBOS) ; ceux qu'on
+// ajoute soi-même vivent dans customCombos, persistés en local. Chacun a
+// une case à cocher pour l'inclure ou non dans la série (par défaut tous
+// cochés) ; l'état des cases est lui aussi mémorisé, par identifiant de
+// combo, pour ne stocker que les exceptions.
+function loadJSON(key, fallback){
+  try {
+    const v = localStorage.getItem(key);
+    return v === null ? fallback : JSON.parse(v);
+  } catch(e){ return fallback; }
 }
-buildClassicLegend();
+function saveJSON(key, val){
+  try { localStorage.setItem(key, JSON.stringify(val)); } catch(e){}
+}
+
+let customCombos = loadJSON('corner_custom_combos', []);
+let disabledCombos = new Set(loadJSON('corner_disabled_combos', []));
+
+function builtinId(seq){ return 'b:' + seq.join('-'); }
+
+function allCombos(){
+  return [
+    ...CLASSIC_COMBOS.map(c => ({ id: builtinId(c.seq), seq: c.seq, label: c.label, builtin: true })),
+    ...customCombos.map(c => ({ id: c.id, seq: c.seq, label: c.label, builtin: false })),
+  ];
+}
+
+function renderCombosList(){
+  const combos = allCombos();
+  combosList.innerHTML = combos.length === 0
+    ? '<p class="combo-empty">Aucun combo pour l\'instant — ajoutes-en un ci-dessous.</p>'
+    : combos.map(c => `
+      <div class="combo-row">
+        <input type="checkbox" class="combo-checkbox" data-id="${c.id}" ${disabledCombos.has(c.id) ? '' : 'checked'} aria-label="Utiliser ce combo">
+        <div class="combo-seq">${c.seq.join('-')}</div>
+        <div class="combo-label">${c.label}</div>
+        ${c.builtin ? '' : `<button type="button" class="combo-del" data-id="${c.id}" aria-label="Supprimer ce combo">✕</button>`}
+      </div>
+    `).join('');
+  syncClassicPanel();
+}
+
+function parseSeqInput(raw){
+  const tokens = raw.split(/[\s,\-–;]+/).map(t => t.trim()).filter(Boolean);
+  if(tokens.length === 0) return { error: 'Entre au moins un numéro (1 à 12).' };
+  if(tokens.length > 8) return { error: 'Maximum 8 coups par combo.' };
+  const seq = [];
+  for(const t of tokens){
+    const n = parseInt(t, 10);
+    if(!Number.isInteger(n) || !MOVES_BY_N.has(n)){
+      return { error: `"${t}" n'est pas un numéro de coup valide (1 à 12).` };
+    }
+    seq.push(n);
+  }
+  return { seq };
+}
+
+combosList.addEventListener('change', (e) => {
+  if(!e.target.classList.contains('combo-checkbox')) return;
+  const id = e.target.dataset.id;
+  if(e.target.checked) disabledCombos.delete(id);
+  else disabledCombos.add(id);
+  saveJSON('corner_disabled_combos', Array.from(disabledCombos));
+  syncClassicPanel();
+});
+
+combosList.addEventListener('click', (e) => {
+  if(!e.target.classList.contains('combo-del')) return;
+  const id = e.target.dataset.id;
+  customCombos = customCombos.filter(c => c.id !== id);
+  disabledCombos.delete(id);
+  saveJSON('corner_custom_combos', customCombos);
+  saveJSON('corner_disabled_combos', Array.from(disabledCombos));
+  renderCombosList();
+});
+
+comboAddBtn.addEventListener('click', () => {
+  const parsed = parseSeqInput(comboSeqInput.value);
+  if(parsed.error){
+    comboAddHint.textContent = parsed.error;
+    comboAddHint.classList.add('warn');
+    return;
+  }
+  const label = comboLabelInput.value.trim() || parsed.seq.map(n => MOVES_BY_N.get(n).name).join(' – ');
+  const id = 'u:' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  customCombos.push({ id, seq: parsed.seq, label });
+  saveJSON('corner_custom_combos', customCombos);
+  comboSeqInput.value = '';
+  comboLabelInput.value = '';
+  comboAddHint.classList.remove('warn');
+  comboAddHint.textContent = `Ajouté : ${parsed.seq.join('-')} — ${label}`;
+  renderCombosList();
+});
 
 document.querySelectorAll('.chip').forEach(chip => {
   chip.addEventListener('click', () => {
@@ -198,14 +288,14 @@ function syncClassicPanel(){
   const n = eligibleClassics().length;
   const v = parseInt(classicChance.value);
   if(n === 0){
-    classicHint.textContent = "Aucun combo classique dispo avec les catégories de coups actives.";
+    classicHint.textContent = "Aucun combo coché n'est compatible avec les catégories de coups actives.";
     classicHint.classList.add('warn');
     return;
   }
   classicHint.classList.remove('warn');
   classicHint.textContent = v === 0
-    ? `0 % : jamais de combo classique, uniquement du tirage libre (${n} combos classiques dispo si tu montes le curseur).`
-    : `${v} % de chances qu'un combo entier soit pioché tel quel parmi ${n} combos classiques (jab-direct-uppercut, jab-direct-low kick, crochet arrière-crochet-direct, etc.) plutôt que généré coup par coup.`;
+    ? `0 % : jamais de combo entier, uniquement du tirage libre (${n} combo${n > 1 ? 's' : ''} coché${n > 1 ? 's' : ''} dispo si tu montes le curseur).`
+    : `${v} % de chances qu'un combo entier soit pioché tel quel parmi les ${n} combo${n > 1 ? 's' : ''} coché${n > 1 ? 's' : ''} ci-dessous plutôt que généré coup par coup.`;
 }
 
 [minGap, maxGap, comboGapMin, comboGapMax, comboMin, comboMax, jabBias, classicChance, sessionDur].forEach(el => {
@@ -428,7 +518,7 @@ function pickMove(isLead, comboLength){
 }
 
 function eligibleClassics(){
-  return CLASSIC_COMBOS.filter(c => c.seq.every(n => {
+  return allCombos().filter(c => !disabledCombos.has(c.id) && c.seq.every(n => {
     const mv = MOVES_BY_N.get(n);
     return mv && activeCats.has(mv.cat);
   }));
@@ -564,6 +654,7 @@ mainBtn.addEventListener('click', () => {
 });
 
 syncSliders();
+renderCombosList();
 
 if('serviceWorker' in navigator){
   window.addEventListener('load', () => {
