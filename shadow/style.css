@@ -186,6 +186,19 @@ input[type=range]{ flex:1; accent-color: var(--ember); height:4px; min-width:0; 
   background:transparent; color:var(--ember); cursor:pointer;
 }
 .btn-small:active{ transform:scale(0.98); background:rgba(232,99,44,0.08); }
+
+.keypad{
+  display:grid; grid-template-columns:repeat(3, 1fr); gap:6px;
+  margin-bottom:10px; max-width:260px;
+}
+.keypad button{
+  padding:12px 0; font-family:inherit; font-size:17px; font-weight:700;
+  border:1px solid var(--line); border-radius:4px;
+  background:var(--bg); color:var(--paper); cursor:pointer;
+}
+.keypad button:active{ background:var(--ember-dim); color:#12100e; border-color:var(--ember-dim); }
+.keypad button.key-dash{ color:var(--ember); border-color:var(--ember-dim); }
+.keypad button.key-back{ font-size:15px; color:var(--paper-dim); }
 .hint{
   font-size:12px; line-height:1.5; color:var(--paper-dim);
   margin:-4px 0 12px;

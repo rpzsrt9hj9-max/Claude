@@ -63,6 +63,40 @@ const comboSeqInput = document.getElementById('comboSeqInput');
 const comboLabelInput = document.getElementById('comboLabelInput');
 const comboAddBtn = document.getElementById('comboAddBtn');
 const comboAddHint = document.getElementById('comboAddHint');
+const comboKeypad = document.getElementById('comboKeypad');
+
+// Pavé personnalisé pour le champ de séquence : le clavier natif des
+// mobiles n'a pas toujours de tiret en mode numérique (voir inputmode
+// "none" sur le champ), donc on fournit nous-mêmes chiffres + tiret +
+// effacement, insérés à la position du curseur.
+function insertAtCursor(input, text){
+  const start = input.selectionStart ?? input.value.length;
+  const end = input.selectionEnd ?? input.value.length;
+  input.value = input.value.slice(0, start) + text + input.value.slice(end);
+  const pos = start + text.length;
+  input.focus();
+  input.setSelectionRange(pos, pos);
+}
+function backspaceAtCursor(input){
+  const start = input.selectionStart ?? input.value.length;
+  const end = input.selectionEnd ?? input.value.length;
+  if(start === end){
+    if(start === 0) return;
+    input.value = input.value.slice(0, start - 1) + input.value.slice(end);
+    input.focus();
+    input.setSelectionRange(start - 1, start - 1);
+  } else {
+    input.value = input.value.slice(0, start) + input.value.slice(end);
+    input.focus();
+    input.setSelectionRange(start, start);
+  }
+}
+comboKeypad.addEventListener('click', (e) => {
+  const key = e.target.dataset.key;
+  if(!key) return;
+  if(key === 'back') backspaceAtCursor(comboSeqInput);
+  else insertAtCursor(comboSeqInput, key);
+});
 
 function buildLegend(){
   const table = document.getElementById('legendTable');

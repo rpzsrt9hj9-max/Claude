@@ -148,11 +148,25 @@
 
     <div class="combo-add">
       <div class="combo-add-row">
-        <input type="text" id="comboSeqInput" class="combo-input" placeholder="ex : 1-2-8" autocomplete="off">
+        <input type="text" id="comboSeqInput" class="combo-input" placeholder="ex : 1-2-8" inputmode="none" autocomplete="off">
         <input type="text" id="comboLabelInput" class="combo-input" placeholder="Nom (optionnel)" autocomplete="off">
       </div>
+      <div class="keypad" id="comboKeypad">
+        <button type="button" data-key="1">1</button>
+        <button type="button" data-key="2">2</button>
+        <button type="button" data-key="3">3</button>
+        <button type="button" data-key="4">4</button>
+        <button type="button" data-key="5">5</button>
+        <button type="button" data-key="6">6</button>
+        <button type="button" data-key="7">7</button>
+        <button type="button" data-key="8">8</button>
+        <button type="button" data-key="9">9</button>
+        <button type="button" class="key-dash" data-key="-">–</button>
+        <button type="button" data-key="0">0</button>
+        <button type="button" class="key-back" data-key="back" aria-label="Effacer le dernier caractère">⌫</button>
+      </div>
       <button type="button" class="btn-small" id="comboAddBtn">+ Ajouter ce combo</button>
-      <p class="hint" id="comboAddHint">Numéros séparés par des tirets ou virgules (1 à 12, voir la numérotation de référence ci-dessous). Ex : 1-2-8 pour jab, direct, low kick arrière.</p>
+      <p class="hint" id="comboAddHint">Numéros séparés par des tirets (1 à 12, voir la numérotation de référence ci-dessous). Ex : 1-2-8 pour jab, direct, low kick arrière.</p>
     </div>
   </div>
 
