@@ -118,6 +118,12 @@ button.testsound{
 .row label{ font-size:14px; color:var(--paper); flex-shrink:0; }
 .row .val{ font-size:13px; color:var(--ember); font-variant-numeric:tabular-nums; min-width:76px; text-align:right;}
 input[type=range]{ flex:1; accent-color: var(--ember); height:4px; min-width:0; }
+.voice-select{
+  flex:1; min-width:0; max-width:220px;
+  background:var(--bg); color:var(--paper);
+  border:1px solid var(--line); border-radius:2px;
+  padding:8px 10px; font-family:inherit; font-size:13px;
+}
 .hint{
   font-size:12px; line-height:1.5; color:var(--paper-dim);
   margin:-4px 0 12px;

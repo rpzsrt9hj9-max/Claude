@@ -36,6 +36,25 @@
   </div>
 
   <div class="panel">
+    <h2>Voix</h2>
+    <div class="row">
+      <label>Voix française</label>
+      <select id="voiceSelect" class="voice-select"></select>
+    </div>
+    <div class="row">
+      <label>Débit</label>
+      <input type="range" id="voiceRate" min="70" max="130" step="5" value="100">
+      <div class="val" id="voiceRateVal">1.00×</div>
+    </div>
+    <div class="row">
+      <label>Tonalité</label>
+      <input type="range" id="voicePitch" min="70" max="130" step="5" value="100">
+      <div class="val" id="voicePitchVal">1.00×</div>
+    </div>
+    <p class="hint">Les voix intégrées au navigateur sonnent souvent robotiques, surtout à haut débit. Sur iPhone : Réglages → Accessibilité → Contenu énoncé → Voix → Français, télécharge une voix "Améliorée"/"Premium" — elle apparaîtra ensuite dans la liste ci-dessus, nettement plus naturelle.</p>
+  </div>
+
+  <div class="panel">
     <h2>Session</h2>
     <div class="row">
       <label>Durée</label>

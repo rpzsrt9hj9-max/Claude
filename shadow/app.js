@@ -213,16 +213,87 @@ function syncClassicPanel(){
 });
 
 // ---- Speech synthesis, with mobile-unlock handling ----
+//
+// La qualité "naturelle" de la voix dépend presque entièrement de la voix
+// installée sur l'appareil, pas du code : les moteurs locaux embarqués
+// sonnent robotiques, les voix réseau/"améliorées" bien plus humaines.
+// On expose donc un vrai choix (liste + débit + tonalité) plutôt que de
+// deviner un seul réglage qui conviendrait à tout le monde.
+function loadPref(key, fallback){
+  try {
+    const v = localStorage.getItem(key);
+    return v === null ? fallback : v;
+  } catch(e){ return fallback; }
+}
+function savePref(key, val){
+  try { localStorage.setItem(key, val); } catch(e){}
+}
+
+const voiceSelect = document.getElementById('voiceSelect');
+const voiceRate = document.getElementById('voiceRate');
+const voicePitch = document.getElementById('voicePitch');
+const voiceRateVal = document.getElementById('voiceRateVal');
+const voicePitchVal = document.getElementById('voicePitchVal');
+
 let frVoice = null;
-function pickVoice(){
+let availableFrVoices = [];
+
+// Heuristique de qualité : les voix réseau ("localService: false", souvent
+// gratifiées d'un nom du type "Google français") et les voix mobiles
+// "Enhanced/Premium" sonnent nettement plus naturelles que le moteur local
+// par défaut.
+function scoreVoice(v){
+  let s = 0;
+  const lang = (v.lang || '').toLowerCase();
+  if(lang === 'fr-fr') s += 3;
+  else if(lang.startsWith('fr')) s += 1;
+  if(v.localService === false) s += 5;
+  if(/google|amélie|amelie|audrey|thomas|enhanced|premium|natural|wavenet|neural/i.test(v.name)) s += 2;
+  return s;
+}
+
+function applySelectedVoice(){
+  const uri = voiceSelect.value;
+  frVoice = availableFrVoices.find(v => v.voiceURI === uri) || availableFrVoices[0] || null;
+}
+
+function refreshVoiceList(){
   if(!('speechSynthesis' in window)) return;
-  const voices = speechSynthesis.getVoices();
-  frVoice = voices.find(v => v.lang && v.lang.toLowerCase().startsWith('fr')) || null;
+  availableFrVoices = speechSynthesis.getVoices()
+    .filter(v => v.lang && v.lang.toLowerCase().startsWith('fr'))
+    .sort((a, b) => scoreVoice(b) - scoreVoice(a));
+
+  if(availableFrVoices.length === 0){
+    voiceSelect.innerHTML = '<option value="">Aucune voix française détectée</option>';
+    frVoice = null;
+    return;
+  }
+  const wanted = loadPref('corner_voice', '');
+  const keep = availableFrVoices.some(v => v.voiceURI === wanted) ? wanted : availableFrVoices[0].voiceURI;
+  voiceSelect.innerHTML = availableFrVoices.map(v =>
+    `<option value="${v.voiceURI}">${v.name}${v.localService === false ? ' ☁️' : ''}</option>`
+  ).join('');
+  voiceSelect.value = keep;
+  applySelectedVoice();
 }
 if('speechSynthesis' in window){
-  pickVoice();
-  speechSynthesis.onvoiceschanged = pickVoice;
+  refreshVoiceList();
+  speechSynthesis.onvoiceschanged = refreshVoiceList;
 }
+voiceSelect.addEventListener('change', () => {
+  savePref('corner_voice', voiceSelect.value);
+  applySelectedVoice();
+});
+
+voiceRate.value = loadPref('corner_rate', '100');
+voicePitch.value = loadPref('corner_pitch', '100');
+function syncVoiceParams(){
+  voiceRateVal.textContent = (parseInt(voiceRate.value) / 100).toFixed(2) + '×';
+  voicePitchVal.textContent = (parseInt(voicePitch.value) / 100).toFixed(2) + '×';
+}
+voiceRate.addEventListener('input', () => { syncVoiceParams(); savePref('corner_rate', voiceRate.value); });
+voicePitch.addEventListener('input', () => { syncVoiceParams(); savePref('corner_pitch', voicePitch.value); });
+syncVoiceParams();
 
 function speak(text, onend){
   if(!voiceOn || !('speechSynthesis' in window)){ if(onend) onend(); return; }
@@ -230,8 +301,8 @@ function speak(text, onend){
   const u = new SpeechSynthesisUtterance(text);
   if(frVoice) u.voice = frVoice;
   u.lang = 'fr-FR';
-  u.rate = 1.15;
-  u.pitch = 0.9;
+  u.rate = parseInt(voiceRate.value) / 100;
+  u.pitch = parseInt(voicePitch.value) / 100;
   if(onend) u.onend = onend;
   speechSynthesis.speak(u);
 }
@@ -239,7 +310,7 @@ function speak(text, onend){
 // Chrome/mobile need speak() called directly inside a user gesture at least once.
 function unlockAudio(){
   if(!('speechSynthesis' in window)) return;
-  pickVoice();
+  refreshVoiceList();
   const u = new SpeechSynthesisUtterance('.');
   u.volume = 1;
   speechSynthesis.speak(u);
@@ -253,8 +324,8 @@ testSoundBtn.addEventListener('click', () => {
     return;
   }
   unlockAudio();
-  setTimeout(() => speak('Un, jab du gauche, deux, direct du droit'), 150);
-  soundNote.textContent = 'Tu devrais entendre "un, jab du gauche, deux, direct du droit". Si rien ne sort, vérifie le volume / mode silencieux du téléphone.';
+  setTimeout(() => speak('1 jab du gauche 2 direct du droit'), 150);
+  soundNote.textContent = 'Tu devrais entendre "un, jab du gauche, deux, direct du droit". Si ça sonne robotique, essaie une autre voix dans le panneau "Voix" ci-dessous, ou ajuste le débit et la tonalité.';
   soundNote.classList.remove('warn');
 });
 
@@ -301,7 +372,7 @@ function baseVoiceName(m){
 function voicePhrase(m){
   if(!voiceNameOn) return String(m.n);
   const spoken = sideSpoken(m.side);
-  return spoken ? `${m.n}, ${baseVoiceName(m)} ${spoken}` : `${m.n}, ${baseVoiceName(m)}`;
+  return spoken ? `${m.n} ${baseVoiceName(m)} ${spoken}` : `${m.n} ${baseVoiceName(m)}`;
 }
 
 // Part du jab pour une frappe donnée : on interpole entre sa part naturelle
