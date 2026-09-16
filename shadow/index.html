@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#12100e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Corner">
+<title>Corner — Appel de coups MMA</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Corner Call</h1>
+    <div class="round" id="roundClock">00:00</div>
+  </header>
+
+  <div class="stage">
+    <div class="status" id="status">Prêt</div>
+    <div class="call-number" id="callNumber">–</div>
+    <div class="call-name" id="callName">&nbsp;</div>
+    <div class="call-side" id="callSide">&nbsp;</div>
+  </div>
+
+  <div class="maction">
+    <button class="big" id="mainBtn">Démarrer l'assaut</button>
+  </div>
+  <div class="sound-note" id="soundNote">Teste le son avant de démarrer (certains navigateurs le bloquent tant que tu n'as pas interagi).</div>
+  <div class="maction" style="margin-top:-8px;">
+    <button class="big testsound" id="testSoundBtn" style="max-width:100%;">Tester le son</button>
+  </div>
+
+  <div class="panel">
+    <h2>Voix</h2>
+    <div class="row">
+      <label>Voix française</label>
+      <select id="voiceSelect" class="voice-select"></select>
+      <button type="button" class="refresh-btn" id="voiceRefreshBtn" aria-label="Rafraîchir la liste des voix" title="Rafraîchir la liste des voix">🔄</button>
+    </div>
+    <p class="hint" id="voiceRefreshHint">Voix nouvellement installée absente de la liste ? Clique sur 🔄.</p>
+    <div class="row">
+      <label>Débit</label>
+      <input type="range" id="voiceRate" min="70" max="130" step="5" value="100">
+      <div class="val" id="voiceRateVal">1.00×</div>
+    </div>
+    <div class="row">
+      <label>Tonalité</label>
+      <input type="range" id="voicePitch" min="70" max="130" step="5" value="100">
+      <div class="val" id="voicePitchVal">1.00×</div>
+    </div>
+    <p class="hint">Les voix intégrées au navigateur sonnent souvent robotiques, surtout à haut débit.</p>
+
+    <button type="button" class="link-btn" id="voiceHelpBtn">🔊 Comment avoir une meilleure voix ?</button>
+    <div class="voice-help" id="voiceHelpPanel" hidden>
+      <div class="voice-help-os" data-os="ios">
+        <h3>📱 iPhone / iPad</h3>
+        <p>Réglages → Accessibilité → Contenu énoncé → Voix → Français → télécharge une voix marquée <strong>« Améliorée »</strong> ou <strong>« Premium »</strong> (Océane, Amélie, Thomas...). Reviens ensuite sur cette page, elle apparaît dans la liste ci-dessus.</p>
+      </div>
+      <div class="voice-help-os" data-os="android">
+        <h3>🤖 Android</h3>
+        <p>Paramètres → Système → Langues et saisie → Synthèse vocale → moteur <strong>Google</strong> → Installer les données vocales → Français. Choisis la qualité « réseau » si elle est proposée : bien plus naturelle que la voix hors-ligne.</p>
+      </div>
+      <div class="voice-help-os" data-os="desktop">
+        <h3>💻 Ordinateur</h3>
+        <p>Sous Chrome ou Edge, les voix « Google » (réseau) sont en général déjà disponibles sans rien installer. Si la liste reste pauvre, vérifie les voix de synthèse vocale installées dans les réglages d'accessibilité du système.</p>
+      </div>
+      <p class="hint" style="margin:10px 0 0;">Une fois une meilleure voix installée, clique sur 🔄 à côté du menu déroulant ci-dessus pour la faire apparaître (repérable par ☁️ si c'est une voix réseau). Si elle n'apparaît toujours pas : ferme complètement le navigateur ou l'appli (pas juste mettre en arrière-plan) et rouvre-la — la liste des voix du système est mise en cache au démarrage.</p>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Session</h2>
+    <div class="row">
+      <label>Durée</label>
+      <input type="range" id="sessionDur" min="0" max="30" step="1" value="0">
+      <div class="val" id="sessionDurVal">Illimitée</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Cadence entre chaque frappe</h2>
+    <div class="row">
+      <label>Intervalle min</label>
+      <input type="range" id="minGap" min="3" max="30" step="1" value="10">
+      <div class="val" id="minGapVal">1.0 s</div>
+    </div>
+    <div class="row">
+      <label>Intervalle max</label>
+      <input type="range" id="maxGap" min="3" max="30" step="1" value="28">
+      <div class="val" id="maxGapVal">2.8 s</div>
+    </div>
+    <p class="hint">Délai entre deux frappes à l'intérieur d'un même combo.</p>
+  </div>
+
+  <div class="panel">
+    <h2>Délai entre les combos</h2>
+    <div class="row">
+      <label>Intervalle min</label>
+      <input type="range" id="comboGapMin" min="10" max="50" step="1" value="20">
+      <div class="val" id="comboGapMinVal">2.0 s</div>
+    </div>
+    <div class="row">
+      <label>Intervalle max</label>
+      <input type="range" id="comboGapMax" min="10" max="50" step="1" value="50">
+      <div class="val" id="comboGapMaxVal">5.0 s</div>
+    </div>
+    <p class="hint">Une fois un combo terminé, le suivant part après un délai tiré au hasard dans cet intervalle (réglable de 1 à 5 s).</p>
+  </div>
+
+  <div class="panel">
+    <h2>Longueur des combos</h2>
+    <div class="row">
+      <label>Combo min</label>
+      <input type="range" id="comboMin" min="1" max="5" step="1" value="1">
+      <div class="val" id="comboMinVal">1 coup</div>
+    </div>
+    <div class="row">
+      <label>Combo max</label>
+      <input type="range" id="comboMax" min="1" max="5" step="1" value="3">
+      <div class="val" id="comboMaxVal">3 coups</div>
+    </div>
+    <p class="hint" id="comboHint">Chaque combo tire sa longueur au hasard entre 1 et 3 coups.</p>
+  </div>
+
+  <div class="panel">
+    <h2>Prédominance du jab</h2>
+    <div class="row">
+      <label>Dosage</label>
+      <input type="range" id="jabBias" min="0" max="100" step="5" value="50">
+      <div class="val" id="jabBiasVal">50 %</div>
+    </div>
+    <p class="hint" id="jabHint"></p>
+  </div>
+
+  <div class="panel">
+    <h2>Combos</h2>
+    <div class="row">
+      <label>Fréquence</label>
+      <input type="range" id="classicChance" min="0" max="100" step="5" value="40">
+      <div class="val" id="classicChanceVal">40 %</div>
+    </div>
+    <p class="hint" id="classicHint"></p>
+
+    <div class="combo-list" id="combosList"></div>
+
+    <div class="combo-add">
+      <div class="combo-add-row">
+        <input type="text" id="comboSeqInput" class="combo-input" placeholder="ex : 1-2-8" inputmode="none" autocomplete="off">
+        <input type="text" id="comboLabelInput" class="combo-input" placeholder="Nom (optionnel)" autocomplete="off">
+      </div>
+      <div class="keypad" id="comboKeypad">
+        <button type="button" data-key="1">1</button>
+        <button type="button" data-key="2">2</button>
+        <button type="button" data-key="3">3</button>
+        <button type="button" data-key="4">4</button>
+        <button type="button" data-key="5">5</button>
+        <button type="button" data-key="6">6</button>
+        <button type="button" data-key="7">7</button>
+        <button type="button" data-key="8">8</button>
+        <button type="button" data-key="9">9</button>
+        <button type="button" class="key-dash" data-key="-">–</button>
+        <button type="button" data-key="0">0</button>
+        <button type="button" class="key-back" data-key="back" aria-label="Effacer le dernier caractère">⌫</button>
+      </div>
+      <button type="button" class="btn-small" id="comboAddBtn">+ Ajouter ce combo</button>
+      <p class="hint" id="comboAddHint">Numéros séparés par des tirets (1 à 12, voir la numérotation de référence ci-dessous). Ex : 1-2-8 pour jab, direct, low kick arrière.</p>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Coups actifs</h2>
+    <div class="chips" id="chipRow">
+      <div class="chip active" data-cat="poings">Poings (1–6)</div>
+      <div class="chip active" data-cat="lowkick">Low kicks (7–8)</div>
+      <div class="chip active" data-cat="kickmid">Kicks corps/tête (9–10)</div>
+      <div class="chip active" data-cat="knee">Genoux/Teep (11–12)</div>
+    </div>
+    <div class="toggle-row">
+      <span>Annonce vocale</span>
+      <div class="switch on" id="voiceToggle"></div>
+    </div>
+    <div class="toggle-row">
+      <span>Annoncer le nom à l'oral</span>
+      <div class="switch on" id="voiceNameToggle"></div>
+    </div>
+    <div class="toggle-row">
+      <span>Afficher le nom du coup</span>
+      <div class="switch on" id="nameToggle"></div>
+    </div>
+    <div class="toggle-row">
+      <span>Garde gauchère (droite devant)</span>
+      <div class="switch" id="stanceToggle"></div>
+    </div>
+  </div>
+
+  <details>
+    <summary>Numérotation de référence</summary>
+    <div class="legend-table" id="legendTable"></div>
+  </details>
+
+  <footer>Chaque appel = un coup qui arrive. Ta réaction : esquive, blocage ou déplacement.</footer>
+</div>
+<script src="app.js"></script>
+</body>
+</html>

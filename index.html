@@ -2,72 +2,110 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#111318">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Horaires">
-<title>Calculateur d'horaires</title>
-<link rel="manifest" href="manifest.json">
-<link rel="apple-touch-icon" href="icon.svg">
-<link rel="icon" href="icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="style.css">
+<title>Mes petites applications</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #111318;
+    --card: #1b1e26;
+    --card-border: #2a2e38;
+    --text: #f2f3f5;
+    --muted: #9aa0ac;
+    --accent: #5b8cff;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    min-height: 100vh;
+  }
+  header {
+    padding: calc(env(safe-area-inset-top) + 24px) 20px 8px;
+  }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .subtitle { color: var(--muted); font-size: 14px; margin: 0; }
+  main {
+    padding: 16px; max-width: 720px; margin: 0 auto;
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  a.app-card {
+    display: block;
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: 16px;
+    padding: 18px;
+    text-decoration: none;
+    color: var(--text);
+  }
+  a.app-card:hover { border-color: var(--accent); }
+  .app-title { font-size: 17px; font-weight: 600; margin: 0 0 6px; }
+  .app-desc { color: var(--muted); font-size: 14px; margin: 0; line-height: 1.5; }
+  .app-links { margin-top: 10px; display: flex; gap: 14px; flex-wrap: wrap; }
+  .app-links span { color: var(--accent); font-size: 13px; }
+  .app-path {
+    margin-top: 10px; font-size: 12px; color: var(--muted);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+</style>
 </head>
 <body>
 
-<header class="topbar">
-  <h1>Calculateur d'horaires</h1>
+<header>
+  <h1>Mes petites applications</h1>
+  <p class="subtitle">Toutes hébergées sur ce même site, développées branche par branche.</p>
 </header>
 
 <main>
-  <section class="card">
-    <h2>Guess</h2>
-    <p class="card-hint">Ton estimation de l'heure de fin</p>
-    <input type="time" id="guess-time-input" class="time-input">
-  </section>
+  <a class="app-card" href="shadow/index.html">
+    <p class="app-title">Corner — appel de coups MMA</p>
+    <p class="app-desc">
+      Shadowboxing guidé : l'app annonce les coups à la numérotation (1 à 12), tu enchaînes
+      esquives, blocages et déplacements. Cadence, longueur de combo et prédominance du jab réglables.
+    </p>
+    <p class="app-path">lien direct : /shadow/</p>
+  </a>
 
-  <section class="card">
-    <h2>Heure de départ</h2>
-    <div class="start-toggle">
-      <button id="btn-now" class="toggle-btn active" type="button">Maintenant</button>
-      <button id="btn-manual" class="toggle-btn" type="button">Manuel</button>
-    </div>
-    <input type="time" id="start-time-input" class="time-input" disabled>
-  </section>
+  <a class="app-card" href="notes/index.html">
+    <p class="app-title">Notes horodatées</p>
+    <p class="app-desc">
+      Prise de notes datées, avec page de todo partagée, journal et documents.
+    </p>
+    <p class="app-path">lien direct : /notes/</p>
+  </a>
 
-  <section class="card">
-    <div class="steps-header">
-      <h2>Étapes</h2>
-      <button id="btn-add-step" class="add-btn" type="button">+ Ajouter une ligne</button>
+  <a class="app-card" href="pret/index.html">
+    <p class="app-title">Calculateur de prêt immobilier</p>
+    <p class="app-desc">
+      Négociation du bien, montant à emprunter, mensualités et tableau d'amortissement complet.
+    </p>
+    <p class="app-path">lien direct : /pret/</p>
+  </a>
+
+  <a class="app-card" href="isolation/index.html">
+    <p class="app-title">Simulateur d'isolation thermique</p>
+    <p class="app-desc">
+      Onde de température sinusoïdale à travers une paroi : température extérieure vs
+      température de surface intérieure de l'isolant, avec déphasage et amortissement.
+    </p>
+    <div class="app-links">
+      <span>→ V1 : paroi simple</span>
+      <span>→ V2 : comparaison de solutions multicouches (isolation/v2/)</span>
     </div>
-    <ul id="steps-list" class="steps-list"></ul>
-  </section>
+    <p class="app-path">lien direct : /isolation/ et /isolation/v2/</p>
+  </a>
+
+  <a class="app-card" href="horaires/index.html">
+    <p class="app-title">Calculateur d'horaires</p>
+    <p class="app-desc">
+      Estime ton heure d'arrivée à partir d'une heure de départ et d'une liste d'étapes,
+      avec comparaison à ton estimation ("guess").
+    </p>
+    <p class="app-path">lien direct : /horaires/</p>
+  </a>
 </main>
 
-<footer class="result-bar">
-  <div class="result-main">
-    <div class="result-label">Heure d'arrivée</div>
-    <div id="result-time" class="result-time">--:--</div>
-  </div>
-  <div id="delta-row" class="delta-row hidden">
-    <span class="delta-label">Écart vs guess</span>
-    <span id="delta-value" class="delta-value">--</span>
-  </div>
-</footer>
-
-<template id="step-template">
-  <li class="step-row">
-    <input type="text" class="step-desc" placeholder="Description (ex : trajet vélo)">
-    <div class="step-duration">
-      <input type="number" class="step-hours" min="0" inputmode="numeric" placeholder="0" aria-label="Heures">
-      <span class="duration-unit">h</span>
-      <input type="number" class="step-minutes" min="0" max="59" inputmode="numeric" placeholder="0" aria-label="Minutes">
-      <span class="duration-unit">min</span>
-    </div>
-    <button class="step-remove" type="button" aria-label="Supprimer la ligne">✕</button>
-  </li>
-</template>
-
-<script src="app.js"></script>
 </body>
 </html>
