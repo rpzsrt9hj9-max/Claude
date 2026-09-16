@@ -124,6 +124,13 @@ input[type=range]{ flex:1; accent-color: var(--ember); height:4px; min-width:0; 
   border:1px solid var(--line); border-radius:2px;
   padding:8px 10px; font-family:inherit; font-size:13px;
 }
+.refresh-btn{
+  flex-shrink:0; width:36px; height:36px;
+  border:1px solid var(--line); border-radius:2px;
+  background:var(--bg); color:var(--paper); font-size:15px;
+  cursor:pointer; padding:0;
+}
+.refresh-btn:active{ background:var(--ember-dim); border-color:var(--ember-dim); }
 .link-btn{
   display:block;
   background:none; border:none; padding:0;

@@ -40,7 +40,9 @@
     <div class="row">
       <label>Voix française</label>
       <select id="voiceSelect" class="voice-select"></select>
+      <button type="button" class="refresh-btn" id="voiceRefreshBtn" aria-label="Rafraîchir la liste des voix" title="Rafraîchir la liste des voix">🔄</button>
     </div>
+    <p class="hint" id="voiceRefreshHint">Voix nouvellement installée absente de la liste ? Clique sur 🔄.</p>
     <div class="row">
       <label>Débit</label>
       <input type="range" id="voiceRate" min="70" max="130" step="5" value="100">
@@ -67,7 +69,7 @@
         <h3>💻 Ordinateur</h3>
         <p>Sous Chrome ou Edge, les voix « Google » (réseau) sont en général déjà disponibles sans rien installer. Si la liste reste pauvre, vérifie les voix de synthèse vocale installées dans les réglages d'accessibilité du système.</p>
       </div>
-      <p class="hint" style="margin:10px 0 0;">Une fois une meilleure voix installée, reviens dans le menu déroulant ci-dessus pour la choisir — repérable par ☁️ si c'est une voix réseau.</p>
+      <p class="hint" style="margin:10px 0 0;">Une fois une meilleure voix installée, clique sur 🔄 à côté du menu déroulant ci-dessus pour la faire apparaître (repérable par ☁️ si c'est une voix réseau). Si elle n'apparaît toujours pas : ferme complètement le navigateur ou l'appli (pas juste mettre en arrière-plan) et rouvre-la — la liste des voix du système est mise en cache au démarrage.</p>
     </div>
   </div>
 

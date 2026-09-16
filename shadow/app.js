@@ -354,6 +354,8 @@ function savePref(key, val){
 }
 
 const voiceSelect = document.getElementById('voiceSelect');
+const voiceRefreshBtn = document.getElementById('voiceRefreshBtn');
+const voiceRefreshHint = document.getElementById('voiceRefreshHint');
 const voiceRate = document.getElementById('voiceRate');
 const voicePitch = document.getElementById('voicePitch');
 const voiceRateVal = document.getElementById('voiceRateVal');
@@ -407,6 +409,25 @@ if('speechSynthesis' in window){
 voiceSelect.addEventListener('change', () => {
   savePref('corner_voice', voiceSelect.value);
   applySelectedVoice();
+});
+
+// Le navigateur/l'OS met en cache la liste des voix au démarrage : une voix
+// tout juste installée n'apparaît souvent qu'après ce rafraîchissement
+// manuel, voire un vrai redémarrage du navigateur (pas juste le mettre en
+// arrière-plan) sur certains mobiles.
+voiceRefreshBtn.addEventListener('click', () => {
+  const before = availableFrVoices.length;
+  refreshVoiceList();
+  const after = availableFrVoices.length;
+  voiceRefreshHint.classList.remove('warn');
+  if(after === 0){
+    voiceRefreshHint.textContent = "Toujours aucune voix française détectée. Ferme complètement le navigateur/l'appli (pas juste en arrière-plan) et rouvre-la.";
+    voiceRefreshHint.classList.add('warn');
+  } else if(after > before){
+    voiceRefreshHint.textContent = `✓ ${after} voix française${after > 1 ? 's' : ''} détectée${after > 1 ? 's' : ''}, dont ${after - before} nouvelle${after - before > 1 ? 's' : ''}.`;
+  } else {
+    voiceRefreshHint.textContent = `${after} voix française${after > 1 ? 's' : ''} détectée${after > 1 ? 's' : ''} — rien de nouveau. Si tu viens d'installer une voix, ferme complètement le navigateur/l'appli et rouvre-la.`;
+  }
 });
 
 voiceRate.value = loadPref('corner_rate', '100');
