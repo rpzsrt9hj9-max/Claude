@@ -1,0 +1,13 @@
+node_modules
+dist
+dev-dist
+data
+# Données personnelles : jamais dans le dépôt public
+scripts/seed.local.js
+*.local.sql
+installation-supabase.sql
+correction-accents.sql
+scripts/*.local.mjs
+mise-a-jour-*.sql
+demo
+dist-demo
