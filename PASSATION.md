@@ -82,9 +82,12 @@ Codé selon les décisions ci-dessous, testé en mode démo au format téléphon
 ### À faire par l'utilisateur
 - Coller **`supabase/schema.sql`** dans Supabase (SQL Editor → Run). Idempotent : crée les tables, migre `fait` → `statut`, crée les liens des anciens déplacements et le bucket `photos`.
 
-### Questions encore ouvertes
-- « Dupliquer un déplacement » a été retiré de l'interface (fonction `duplicateTrip` conservée) : à confirmer.
-- Statuts d'intervention gardés : En préparation / En cours / Terminée (pas de « Planifiée »).
+### Décisions validées par l'utilisateur
+- « Dupliquer un déplacement » retiré de l'interface : validé (fonction `duplicateTrip` conservée dans `shared/ops.js`).
+- Statuts d'intervention : En préparation / En cours / Terminée : validés.
+
+### Prochaine mise à jour prévue
+- Ajouter une **date de planification** aux interventions (à préciser avec l'utilisateur : en plus de la « date d'intervention » actuelle, stockée dans `deplacements.date_debut`, ou à la place ?).
 
 ## 7. Commandes
 
