@@ -26,6 +26,10 @@ const ICONS = {
   download: 'M12 3v12M7 10l5 5 5-5M5 21h14',
   edit: 'M4 20h4L19 9l-4-4L4 16v4z',
   logout: 'M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10',
+  camera: 'M4 8h3l2-3h6l2 3h3v11H4zM12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
+  chat: 'M4 5h16v11H9l-5 4z',
+  print: 'M7 9V3h10v6M7 17H4v-7h16v7h-3M7 14h10v7H7z',
+  van: 'M2 7h12v9H2zM14 10h4l4 3v3h-8M6 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM17 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4z',
 };
 
 export function Icon({ name, className = 'size-5', strokeWidth = 2 }) {

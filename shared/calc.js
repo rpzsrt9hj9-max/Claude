@@ -1,5 +1,6 @@
 // Règles de calcul : quantités à prendre, état « pris », tâches « prêtes ».
 // Rien de tout cela n'est saisi à la main : tout est recalculé à partir des données.
+import { tachesIntervention } from './interventions.js';
 
 const round = (n) => Math.round(n * 1000) / 1000;
 
@@ -15,13 +16,11 @@ export function priseStatus(total, prise) {
 }
 
 /**
- * Calcule tout ce qui dépend d'un déplacement.
- * data = { articles, taches, tache_articles, prise_articles, lieux } (lignes non supprimées)
+ * Calcule tout ce qui dépend d'une intervention (table deplacements).
+ * data = { articles, taches, tache_articles, prise_articles, intervention_taches, lieux } (lignes non supprimées)
  */
 export function computeTrip(deplacementId, data) {
-  const taches = data.taches
-    .filter((t) => t.deplacement_id === deplacementId && !t.modele)
-    .sort((a, b) => (a.ordre ?? 0) - (b.ordre ?? 0));
+  const taches = tachesIntervention(deplacementId, data);
   const tacheById = new Map(taches.map((t) => [t.id, t]));
   const articleById = new Map(data.articles.map((a) => [a.id, a]));
   const priseByArticle = new Map(

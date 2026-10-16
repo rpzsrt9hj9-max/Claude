@@ -47,6 +47,38 @@ revoke all on public.${table} from anon;
 `;
 }
 
+// Migration vers les interventions (idempotente : peut être relancée sans risque).
+// updated_at est mis à « maintenant » pour que la règle « dernière modification gagne » l'accepte.
+sql += `
+-- ---------- Migration : déplacements -> interventions ----------
+do $$
+declare maintenant bigint := (extract(epoch from now()) * 1000)::bigint;
+begin
+  -- Statut des tâches à partir de l'ancienne case « fait »
+  update public.taches set statut = case when fait then 'terminee' else 'a_traiter' end, updated_at = maintenant
+  where statut is null and coalesce(modele, false) = false;
+  -- Un lien intervention <-> tâche pour chaque tâche d'un ancien déplacement
+  insert into public.intervention_taches (id, intervention_id, tache_id, resultat, ordre, created_at, updated_at, deleted)
+  select t.deplacement_id || '~' || t.id, t.deplacement_id, t.id,
+         case when d.statut = 'termine' then case when t.fait then 'terminee' else 'reportee' end end,
+         t.ordre, maintenant, maintenant, false
+  from public.taches t join public.deplacements d on d.id = t.deplacement_id
+  where t.deplacement_id is not null and coalesce(t.modele, false) = false and coalesce(t.deleted, false) = false
+  on conflict (id) do nothing;
+end $$;
+
+-- ---------- Photos : bucket privé Supabase Storage, réservé aux comptes connectés ----------
+insert into storage.buckets (id, name, public) values ('photos', 'photos', false) on conflict (id) do nothing;
+drop policy if exists "photos lecture" on storage.objects;
+create policy "photos lecture" on storage.objects for select to authenticated using (bucket_id = 'photos');
+drop policy if exists "photos ajout" on storage.objects;
+create policy "photos ajout" on storage.objects for insert to authenticated with check (bucket_id = 'photos');
+drop policy if exists "photos modification" on storage.objects;
+create policy "photos modification" on storage.objects for update to authenticated using (bucket_id = 'photos');
+drop policy if exists "photos suppression" on storage.objects;
+create policy "photos suppression" on storage.objects for delete to authenticated using (bucket_id = 'photos');
+`;
+
 const seedIdx = process.argv.indexOf('--seed');
 if (seedIdx < 0) {
   fs.writeFileSync('supabase/schema.sql', sql);

@@ -20,6 +20,15 @@ db.version(2).stores({
   categories: 'id, _dirty',
   article_accessoires: 'id, article_id, _dirty',
 });
+db.version(3).stores({
+  intervention_taches: 'id, intervention_id, tache_id, _dirty',
+  commentaires: 'id, tache_id, intervention_id, _dirty',
+  photos: 'id, commentaire_id, _dirty',
+  // Fichiers photo, locaux seulement (envoyés ensuite dans Supabase Storage)
+  photo_fichiers: 'chemin, envoye',
+});
+
+export const BUCKET = 'photos';
 
 /** Applique une liste d'écritures { table, row } en une transaction locale. */
 export async function write(writes) {
@@ -48,7 +57,7 @@ export const remove = (table, id) => write({ table, row: { id, deleted: true } }
 // ---------- Synchronisation ----------
 
 const listeners = new Set();
-export const syncState = { status: 'idle', authed: null, user: null, pending: 0, lastSync: null };
+export const syncState = { status: 'idle', authed: null, user: null, pending: 0, lastSync: null, message: null };
 function setState(patch) {
   Object.assign(syncState, patch);
   listeners.forEach((l) => l({ ...syncState }));
@@ -84,6 +93,9 @@ const toServer = (table, row) => {
   return out;
 };
 
+// Table ou colonne absente côté Supabase (script SQL de mise à jour pas encore exécuté)
+const isSchemaError = (error) => ['PGRST205', 'PGRST204', '42P01', '42703'].includes(error?.code);
+
 const isAuthError = (error) => error && (error.status === 401 || error.code === 'PGRST301' || /JWT/i.test(error.message || ''));
 
 export async function sync() {
@@ -100,11 +112,17 @@ export async function sync() {
     if (!sess.session) return setState({ status: 'idle', authed: false });
     setState({ status: 'syncing' });
     try {
-      // 1. Envoi des modifications locales
+      // 1. Envoi des modifications locales. Une table pas encore créée en base (mise à jour SQL
+      // non faite) est mise de côté : ses lignes restent en attente, le reste se synchronise.
+      const manquantes = new Set();
       for (const t of TABLE_NAMES) {
         const rows = await db[t].where('_dirty').equals(1).toArray();
         for (let i = 0; i < rows.length; i += 500) {
           const { error } = await supabase.from(t).upsert(rows.slice(i, i + 500).map((r) => toServer(t, r)), { onConflict: 'id' });
+          if (error && isSchemaError(error)) {
+            manquantes.add(t);
+            break;
+          }
           if (error) throw error;
         }
       }
@@ -115,6 +133,10 @@ export async function sync() {
       for (const t of TABLE_NAMES) {
         for (let from = 0; ; from += PAGE) {
           const { data, error } = await supabase.from(t).select('*').gt('rev', Math.max(0, since - OVERLAP)).order('rev').range(from, from + PAGE - 1);
+          if (error && isSchemaError(error)) {
+            manquantes.add(t);
+            break;
+          }
           if (error) throw error;
           for (const row of data) {
             incoming.push({ table: t, row });
@@ -131,14 +153,17 @@ export async function sync() {
           if (local && local._dirty && local.updated_at > row.updated_at) continue;
           await db[table].put({ ...clean, _dirty: 0 });
         }
-        await db.meta.put({ key: 'rev', value: maxRev });
+        // Si une table manque, on ne fait pas avancer la révision : tout sera relu après la mise à jour.
+        if (!manquantes.size) await db.meta.put({ key: 'rev', value: maxRev });
       });
-      setState({ status: 'ok', authed: true, lastSync: Date.now(), pending: await countDirty() });
+      const photoErreur = await envoyerPhotos();
+      const schemaMessage = manquantes.size ? `Base à mettre à jour (${[...manquantes].join(', ')}) : exécute supabase/schema.sql dans Supabase.` : null;
+      setState({ status: manquantes.size || photoErreur ? 'error' : 'ok', authed: true, lastSync: Date.now(), pending: await countDirty(), message: schemaMessage ?? photoErreur });
     } catch (e) {
       console.warn('Synchro impossible', e);
       if (isAuthError(e)) return setState({ status: 'idle', authed: false });
       const network = !navigator.onLine || e instanceof TypeError || /fetch/i.test(e?.message || '');
-      setState({ status: network ? 'offline' : 'error', pending: await countDirty() });
+      setState({ status: network ? 'offline' : 'error', pending: await countDirty(), message: network ? null : e?.message });
     }
   })().finally(() => {
     running = null;
@@ -203,8 +228,68 @@ export async function logout() {
 }
 
 async function wipeLocal() {
-  await db.transaction('rw', [...TABLE_NAMES.map((t) => db[t]), db.meta], async () => {
+  await db.transaction('rw', [...TABLE_NAMES.map((t) => db[t]), db.meta, db.photo_fichiers], async () => {
     for (const t of TABLE_NAMES) await db[t].clear();
     await db.meta.clear();
+    await db.photo_fichiers.clear();
   });
 }
+
+// ---------- Photos (fichiers dans Supabase Storage, copie locale dans IndexedDB) ----------
+
+/** Réduit une photo (1600 px max, JPEG) avant de la stocker. */
+export async function compresserPhoto(fichier, max = 1600) {
+  try {
+    const img = await createImageBitmap(fichier);
+    const k = Math.min(1, max / Math.max(img.width, img.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(img.width * k);
+    canvas.height = Math.round(img.height * k);
+    canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+    return await new Promise((ok) => canvas.toBlob((b) => ok(b || fichier), 'image/jpeg', 0.82));
+  } catch {
+    return fichier;
+  }
+}
+
+/** Garde le fichier localement ; il partira vers Supabase Storage à la prochaine synchro. */
+export async function stockerPhoto(chemin, blob) {
+  await db.photo_fichiers.put({ chemin, blob, envoye: 0 });
+  scheduleSync();
+}
+
+const urls = new Map();
+/** URL affichable d'une photo : copie locale, sinon téléchargement (puis mise en cache). */
+export async function urlPhoto(chemin) {
+  if (urls.has(chemin)) return urls.get(chemin);
+  let blob = (await db.photo_fichiers.get(chemin))?.blob;
+  if (!blob && !DEMO && navigator.onLine) {
+    const { data, error } = await supabase.storage.from(BUCKET).download(chemin);
+    if (!error && data) {
+      blob = data;
+      await db.photo_fichiers.put({ chemin, blob, envoye: 1 });
+    }
+  }
+  if (!blob) return null;
+  const url = URL.createObjectURL(blob);
+  urls.set(chemin, url);
+  return url;
+}
+
+export async function supprimerFichierPhoto(chemin) {
+  await db.photo_fichiers.delete(chemin);
+  if (!DEMO && navigator.onLine) await supabase.storage.from(BUCKET).remove([chemin]).catch(() => {});
+}
+
+/** Envoie les photos en attente ; renvoie un message d'erreur ou null. */
+async function envoyerPhotos() {
+  const enAttente = await db.photo_fichiers.where('envoye').equals(0).toArray();
+  for (const p of enAttente) {
+    const { error } = await supabase.storage.from(BUCKET).upload(p.chemin, p.blob, { upsert: true, contentType: p.blob.type || 'image/jpeg' });
+    if (error) return `Envoi des photos impossible (${error.message}). Le bucket « ${BUCKET} » existe-t-il ?`;
+    await db.photo_fichiers.update(p.chemin, { envoye: 1 });
+  }
+  return null;
+}
+
+export const photosEnAttente = () => db.photo_fichiers.where('envoye').equals(0).count();

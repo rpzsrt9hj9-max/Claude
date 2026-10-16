@@ -5,37 +5,56 @@ import { accessoiresFor } from '../../shared/ops.js';
 import { TYPES, TYPE_ICON, TYPE_ORDER } from '../../shared/schema.js';
 import { Button, Icon, Sheet, Stepper, TextField } from '../components/ui.jsx';
 import { ArticleCreator } from '../components/ArticleCreator.jsx';
-import { saveTache, deleteTache, duplicateTache, saveAsModele } from '../actions.js';
+import { saveTache, deleteTache, duplicateTache, saveAsModele, addTachesToIntervention } from '../actions.js';
+import { STATUTS_TACHE, STATUT_ORDER, ajouterEtape, commentairesTache, planification, statutTache, liens } from '../../shared/interventions.js';
+import { Etapes } from '../components/Etapes.jsx';
+import { ListeCommentaires, NouveauCommentaire } from '../components/Commentaires.jsx';
+import { STATUTS } from '../../shared/schema.js';
 
 /**
  * Création / édition d'une tâche (ou d'une tâche type si modele = true) avec ses articles.
  */
-export function TacheEditor({ tache, modele = !!tache?.modele, defaultAppartementId, onClose, onOpen }) {
-  const { data, depId } = useData();
+export function TacheEditor({ tache, modele = !!tache?.modele, defaultAppartementId, interventionId = null, onClose, onOpen }) {
+  const { data } = useData();
   const existingLinks = useMemo(() => (tache ? data.tache_articles.filter((l) => l.tache_id === tache.id) : []), [data, tache]);
   const [titre, setTitre] = useState(tache?.titre ?? '');
   const [description, setDescription] = useState(tache?.description ?? '');
   const [appartementId, setAppartementId] = useState(tache?.appartement_id ?? defaultAppartementId ?? '');
+  const [echeance, setEcheance] = useState(tache?.echeance ?? '');
+  const [statut, setStatut] = useState(tache ? statutTache(tache) : 'a_traiter');
+  const [etape, setEtape] = useState('');
   const [links, setLinks] = useState(() => existingLinks.map((l) => ({ article_id: l.article_id, quantite: Number(l.quantite) || 1 })));
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
 
   const draft = () => ({
     id: tache?.id,
-    deplacement_id: modele ? null : (tache?.deplacement_id ?? depId),
     modele,
     titre,
-    description,
+    description: etape.trim() ? ajouterEtape(description, etape) : description,
     appartement_id: modele ? null : appartementId,
+    echeance: modele ? null : echeance,
+    statut: modele ? null : statut,
     links,
   });
 
   const save = async () => {
     if (!titre.trim()) return;
     setSaving(true);
-    const ordre = Math.max(0, ...data.taches.filter((t) => t.deplacement_id === depId).map((t) => t.ordre || 0)) + 1;
-    await saveTache(draft(), existingLinks, ordre);
+    const id = await saveTache(draft(), existingLinks, 0);
+    // Tâche créée depuis une intervention : elle y est ajoutée directement.
+    if (!tache && interventionId) await addTachesToIntervention(interventionId, [id], { ...data, taches: [...data.taches, { id }] });
     onClose();
+  };
+
+  const prevue = tache && !modele ? planification(tache.id, data) : null;
+  const historique = tache && !modele
+    ? liens(data).filter((l) => l.tache_id === tache.id).map((l) => data.deplacements.find((d) => d.id === l.intervention_id)).filter((d) => d && d.statut === 'termine')
+    : [];
+  const ajoutEtape = () => {
+    if (!etape.trim()) return;
+    setDescription((d) => ajouterEtape(d, etape));
+    setEtape('');
   };
 
   const del = async () => {
@@ -70,14 +89,44 @@ export function TacheEditor({ tache, modele = !!tache?.modele, defaultAppartemen
       }
     >
       <div className="space-y-4">
-        {modele && <p className="rounded-xl bg-violet-100 p-2 text-sm text-violet-900 dark:bg-violet-500/20 dark:text-violet-200">Tâche type : un modèle réutilisable, qui n'apparaît dans aucun déplacement.</p>}
+        {modele && <p className="rounded-xl bg-violet-100 p-2 text-sm text-violet-900 dark:bg-violet-500/20 dark:text-violet-200">Tâche type : un modèle réutilisable, qui n'apparaît pas dans la liste des tâches.</p>}
         <label className="block">
           <span className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-400">Titre</span>
           <TextField value={titre} onChange={setTitre} placeholder="Ex. : Fixer le cadre" autoFocus={!tache} />
         </label>
         {!modele && (
+          <div className="grid grid-cols-3 gap-1 rounded-2xl bg-slate-200 p-1 dark:bg-slate-800" role="radiogroup" aria-label="Statut">
+            {STATUT_ORDER.map((s) => (
+              <button
+                key={s}
+                type="button"
+                role="radio"
+                aria-checked={statut === s}
+                onClick={() => setStatut(s)}
+                className={`min-h-11 rounded-xl text-sm font-semibold ${statut === s ? (s === 'terminee' ? 'bg-emerald-600 text-white' : s === 'reportee' ? 'bg-amber-500 text-white' : 'bg-sky-600 text-white') : 'text-slate-600 dark:text-slate-300'}`}
+              >
+                {STATUTS_TACHE[s]}
+              </button>
+            ))}
+          </div>
+        )}
+        {prevue && (
+          <p className="rounded-xl bg-sky-100 p-2 text-sm text-sky-900 dark:bg-sky-500/20 dark:text-sky-200">
+            🚐 Prévue dans l'intervention « {prevue.nom} » ({STATUTS[prevue.statut]})
+          </p>
+        )}
+        {!modele && (
           <label className="block">
-            <span className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-400">Appartement</span>
+            <span className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-400">Date d'échéance</span>
+            <div className="flex gap-2">
+              <input type="date" className="min-w-0 flex-1" value={echeance ?? ''} onChange={(e) => setEcheance(e.target.value)} />
+              {echeance && <Button variant="ghost" icon="x" aria-label="Effacer la date" className="!px-2" onClick={() => setEcheance('')} />}
+            </div>
+          </label>
+        )}
+        {!modele && (
+          <label className="block">
+            <span className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-400">Bien</span>
             <select className="w-full" value={appartementId ?? ''} onChange={(e) => setAppartementId(e.target.value)}>
               <option value="">—</option>
               {data.appartements.map((a) => (
@@ -90,10 +139,35 @@ export function TacheEditor({ tache, modele = !!tache?.modele, defaultAppartemen
         )}
         <label className="block">
           <span className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-400">Description</span>
-          <TextField multiline value={description} onChange={setDescription} placeholder="Facultatif" />
+          <TextField multiline value={description} onChange={setDescription} placeholder="Facultatif. Une ligne « - [ ] … » devient une étape à cocher." />
         </label>
+        <div className="space-y-2">
+          <Etapes description={description} onChange={setDescription} />
+          <form
+            className="flex gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              ajoutEtape();
+            }}
+          >
+            <input className="min-w-0 flex-1" value={etape} onChange={(e) => setEtape(e.target.value)} placeholder="+ Étape à cocher" aria-label="Nouvelle étape à cocher" />
+            <Button type="submit" icon="plus" aria-label="Ajouter l'étape" className="!px-3" disabled={!etape.trim()} />
+          </form>
+        </div>
 
         <ArticlePicker links={links} setLinks={setLinks} />
+
+        {tache && !modele && (
+          <section className="space-y-2">
+            <h3 className="font-semibold">💬 Commentaires</h3>
+            <NouveauCommentaire tacheId={tache.id} />
+            <ListeCommentaires
+              commentaires={commentairesTache(tache.id, data)}
+              titreDe={(c) => (c.intervention_id ? data.deplacements.find((d) => d.id === c.intervention_id)?.nom : null)}
+            />
+          </section>
+        )}
+        {historique.length > 0 && <p className="text-sm text-slate-500">Interventions passées : {historique.map((d) => d.nom).join(', ')}</p>}
 
         {message && <p className="rounded-xl bg-emerald-100 p-3 text-emerald-900 dark:bg-emerald-500/20 dark:text-emerald-200">{message}</p>}
 

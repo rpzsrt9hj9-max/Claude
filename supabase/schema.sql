@@ -153,6 +153,8 @@ create table if not exists public.taches (
   fait boolean,
   ordre double precision,
   modele boolean,
+  statut text,
+  echeance text,
   created_at bigint not null,
   updated_at bigint not null,
   deleted boolean not null default false,
@@ -165,6 +167,8 @@ alter table public.taches add column if not exists appartement_id text;
 alter table public.taches add column if not exists fait boolean;
 alter table public.taches add column if not exists ordre double precision;
 alter table public.taches add column if not exists modele boolean;
+alter table public.taches add column if not exists statut text;
+alter table public.taches add column if not exists echeance text;
 create index if not exists taches_rev on public.taches(rev);
 drop trigger if exists taches_lww on public.taches;
 create trigger taches_lww before insert or update on public.taches for each row execute function app_lww();
@@ -219,3 +223,101 @@ drop policy if exists "prise_articles connectés" on public.prise_articles;
 create policy "prise_articles connectés" on public.prise_articles for all to authenticated using (true) with check (true);
 grant select, insert, update on public.prise_articles to authenticated;
 revoke all on public.prise_articles from anon;
+
+create table if not exists public.intervention_taches (
+  id text primary key,
+  intervention_id text,
+  tache_id text,
+  resultat text,
+  ordre double precision,
+  created_at bigint not null,
+  updated_at bigint not null,
+  deleted boolean not null default false,
+  rev bigint
+);
+alter table public.intervention_taches add column if not exists intervention_id text;
+alter table public.intervention_taches add column if not exists tache_id text;
+alter table public.intervention_taches add column if not exists resultat text;
+alter table public.intervention_taches add column if not exists ordre double precision;
+create index if not exists intervention_taches_rev on public.intervention_taches(rev);
+drop trigger if exists intervention_taches_lww on public.intervention_taches;
+create trigger intervention_taches_lww before insert or update on public.intervention_taches for each row execute function app_lww();
+alter table public.intervention_taches enable row level security;
+drop policy if exists "intervention_taches connectés" on public.intervention_taches;
+create policy "intervention_taches connectés" on public.intervention_taches for all to authenticated using (true) with check (true);
+grant select, insert, update on public.intervention_taches to authenticated;
+revoke all on public.intervention_taches from anon;
+
+create table if not exists public.commentaires (
+  id text primary key,
+  tache_id text,
+  intervention_id text,
+  texte text,
+  auteur text,
+  created_at bigint not null,
+  updated_at bigint not null,
+  deleted boolean not null default false,
+  rev bigint
+);
+alter table public.commentaires add column if not exists tache_id text;
+alter table public.commentaires add column if not exists intervention_id text;
+alter table public.commentaires add column if not exists texte text;
+alter table public.commentaires add column if not exists auteur text;
+create index if not exists commentaires_rev on public.commentaires(rev);
+drop trigger if exists commentaires_lww on public.commentaires;
+create trigger commentaires_lww before insert or update on public.commentaires for each row execute function app_lww();
+alter table public.commentaires enable row level security;
+drop policy if exists "commentaires connectés" on public.commentaires;
+create policy "commentaires connectés" on public.commentaires for all to authenticated using (true) with check (true);
+grant select, insert, update on public.commentaires to authenticated;
+revoke all on public.commentaires from anon;
+
+create table if not exists public.photos (
+  id text primary key,
+  commentaire_id text,
+  chemin text,
+  legende text,
+  created_at bigint not null,
+  updated_at bigint not null,
+  deleted boolean not null default false,
+  rev bigint
+);
+alter table public.photos add column if not exists commentaire_id text;
+alter table public.photos add column if not exists chemin text;
+alter table public.photos add column if not exists legende text;
+create index if not exists photos_rev on public.photos(rev);
+drop trigger if exists photos_lww on public.photos;
+create trigger photos_lww before insert or update on public.photos for each row execute function app_lww();
+alter table public.photos enable row level security;
+drop policy if exists "photos connectés" on public.photos;
+create policy "photos connectés" on public.photos for all to authenticated using (true) with check (true);
+grant select, insert, update on public.photos to authenticated;
+revoke all on public.photos from anon;
+
+-- ---------- Migration : déplacements -> interventions ----------
+do $$
+declare maintenant bigint := (extract(epoch from now()) * 1000)::bigint;
+begin
+  -- Statut des tâches à partir de l'ancienne case « fait »
+  update public.taches set statut = case when fait then 'terminee' else 'a_traiter' end, updated_at = maintenant
+  where statut is null and coalesce(modele, false) = false;
+  -- Un lien intervention <-> tâche pour chaque tâche d'un ancien déplacement
+  insert into public.intervention_taches (id, intervention_id, tache_id, resultat, ordre, created_at, updated_at, deleted)
+  select t.deplacement_id || '~' || t.id, t.deplacement_id, t.id,
+         case when d.statut = 'termine' then case when t.fait then 'terminee' else 'reportee' end end,
+         t.ordre, maintenant, maintenant, false
+  from public.taches t join public.deplacements d on d.id = t.deplacement_id
+  where t.deplacement_id is not null and coalesce(t.modele, false) = false and coalesce(t.deleted, false) = false
+  on conflict (id) do nothing;
+end $$;
+
+-- ---------- Photos : bucket privé Supabase Storage, réservé aux comptes connectés ----------
+insert into storage.buckets (id, name, public) values ('photos', 'photos', false) on conflict (id) do nothing;
+drop policy if exists "photos lecture" on storage.objects;
+create policy "photos lecture" on storage.objects for select to authenticated using (bucket_id = 'photos');
+drop policy if exists "photos ajout" on storage.objects;
+create policy "photos ajout" on storage.objects for insert to authenticated with check (bucket_id = 'photos');
+drop policy if exists "photos modification" on storage.objects;
+create policy "photos modification" on storage.objects for update to authenticated using (bucket_id = 'photos');
+drop policy if exists "photos suppression" on storage.objects;
+create policy "photos suppression" on storage.objects for delete to authenticated using (bucket_id = 'photos');

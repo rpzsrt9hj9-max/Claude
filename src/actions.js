@@ -3,6 +3,8 @@ import { insert, update, remove, write } from './db.js';
 import { priseId, tacheArticleId, accessoireId, defaultCumul, uuid } from '../shared/schema.js';
 import { findSameName } from '../shared/match.js';
 import { mergeArticles, duplicateTrip, copyTache } from '../shared/ops.js';
+import { ajouterTaches, retirerTache, cloturer, planification, decocherTout } from '../shared/interventions.js';
+import { stockerPhoto, compresserPhoto, supprimerFichierPhoto } from './db.js';
 
 /** Fixe la quantité prise d'un article ; « pris » est vrai quand la quantité totale est atteinte. */
 export function setPrise(deplacementId, item, quantite) {
@@ -43,11 +45,12 @@ export async function saveTache(draft, existingLinks = [], ordre = 0) {
       table: 'taches',
       row: {
         id,
-        deplacement_id: draft.deplacement_id,
         titre: draft.titre.trim(),
         description: draft.description?.trim() || null,
         appartement_id: draft.appartement_id || null,
-        ...(draft.id ? {} : { fait: false, ordre, modele: !!draft.modele, deleted: false }),
+        echeance: draft.modele ? null : draft.echeance || null,
+        ...(draft.statut ? { statut: draft.statut, fait: draft.statut === 'terminee' } : {}),
+        ...(draft.id ? {} : { deplacement_id: null, ordre, modele: !!draft.modele, deleted: false, ...(draft.statut ? {} : { statut: 'a_traiter', fait: false }) }),
       },
     },
   ];
@@ -68,7 +71,9 @@ export async function deleteTache(tache, links) {
   await write([{ table: 'taches', row: { id: tache.id, deleted: true } }, ...links.map((l) => ({ table: 'tache_articles', row: { id: l.id, deleted: true } }))]);
 }
 
-export const setFait = (tache, fait) => update('taches', tache.id, { fait });
+export const setFait = (tache, fait) => update('taches', tache.id, { fait, statut: fait ? 'terminee' : 'a_traiter' });
+export const setStatutTache = (tache, statut) => update('taches', tache.id, { statut, fait: statut === 'terminee' });
+export const setDescription = (tache, description) => update('taches', tache.id, { description });
 
 export async function createArticle({ nom, type, lieu_id = null, categorie_id = null, unite = null }, articles) {
   const clean = nom.trim();
@@ -86,24 +91,71 @@ export const removeAccessoire = (link) => remove('article_accessoires', link.id)
 
 /** Duplique une tâche (avec ses articles) dans le même déplacement, juste après l'originale. */
 export async function duplicateTache(tache, links) {
-  const { id, writes } = copyTache(tache, links, { titre: `${tache.titre} (copie)`, ordre: (tache.ordre ?? 0) + 0.5 });
+  const { id, writes } = copyTache(tache, links, { titre: `${tache.titre} (copie)`, description: decocherTout(tache.description), echeance: tache.echeance ?? null, deplacement_id: null, statut: 'a_traiter', ordre: (tache.ordre ?? 0) + 0.5 });
   await write(writes);
   return id;
 }
 
 /** Enregistre une tâche (ou un brouillon) comme tâche type réutilisable. */
 export async function saveAsModele(draft, links) {
-  const { id, writes } = copyTache({ ...draft, deplacement_id: null }, links, { modele: true, deplacement_id: null, appartement_id: null, ordre: 0 });
+  const { id, writes } = copyTache({ ...draft, deplacement_id: null }, links, { modele: true, deplacement_id: null, appartement_id: null, description: decocherTout(draft.description), statut: null, echeance: null, ordre: 0 });
   await write(writes);
   return id;
 }
 
-/** Crée une tâche du déplacement à partir d'une tâche type. */
-export async function createFromModele(modele, data, deplacement_id, appartement_id, ordre) {
+/** Crée une tâche à partir d'une tâche type (et l'ajoute à l'intervention si elle est donnée). */
+export async function createFromModele(modele, data, interventionId, appartement_id, ordre) {
   const links = data.tache_articles.filter((l) => l.tache_id === modele.id);
-  const { id, writes } = copyTache(modele, links, { deplacement_id, appartement_id: appartement_id || null, modele: false, ordre });
+  const { id, writes } = copyTache(modele, links, { deplacement_id: null, appartement_id: appartement_id || null, modele: false, statut: 'a_traiter', ordre });
+  if (interventionId) writes.push(...ajouterTaches(interventionId, [id], { ...data, taches: [...data.taches, writes[0].row] }));
   await write(writes);
   return id;
+}
+
+// ---------- Interventions ----------
+
+export const updateIntervention = (id, patch) => update('deplacements', id, patch);
+export const createIntervention = (nom, date_debut) => insert('deplacements', { nom, date_debut: date_debut || null, statut: 'en_preparation' });
+export const addTachesToIntervention = (interventionId, tacheIds, data) => write(ajouterTaches(interventionId, tacheIds, data));
+export const removeTacheFromIntervention = (interventionId, tacheId, data) => write(retirerTache(interventionId, tacheId, data));
+export const closeIntervention = (interventionId, choix, data) => write(cloturer(interventionId, choix, data));
+
+/** Supprime une intervention : ses liens et cases « Pris » ; les tâches restent dans la liste générale. */
+export async function deleteIntervention(dep, data) {
+  await write([
+    ...data.intervention_taches.filter((l) => l.intervention_id === dep.id).map((l) => ({ table: 'intervention_taches', row: { id: l.id, deleted: true } })),
+    ...data.taches.filter((t) => t.deplacement_id === dep.id).map((t) => ({ table: 'taches', row: { id: t.id, deplacement_id: null } })),
+    ...data.prise_articles.filter((p) => p.deplacement_id === dep.id).map((p) => ({ table: 'prise_articles', row: { id: p.id, deleted: true } })),
+    { table: 'deplacements', row: { id: dep.id, deleted: true } },
+  ]);
+}
+
+// ---------- Commentaires et photos ----------
+
+/**
+ * Ajoute un commentaire horodaté, avec photos éventuelles.
+ * Pour une tâche, on note l'intervention ouverte où elle est prévue (pour le récap).
+ */
+export async function addCommentaire({ tacheId = null, interventionId = null, texte, fichiers = [], auteur = null }, data) {
+  const id = uuid();
+  const intervention = interventionId ?? (tacheId ? planification(tacheId, data)?.id ?? null : null);
+  const writes = [{ table: 'commentaires', row: { id, tache_id: tacheId, intervention_id: intervention, texte: texte.trim() || null, auteur, deleted: false } }];
+  for (const f of fichiers) {
+    const photoId = uuid();
+    const chemin = `${intervention ?? 'sans-intervention'}/${photoId}.jpg`;
+    await stockerPhoto(chemin, await compresserPhoto(f));
+    writes.push({ table: 'photos', row: { id: photoId, commentaire_id: id, chemin, legende: null, deleted: false } });
+  }
+  await write(writes);
+  return id;
+}
+
+export async function deleteCommentaire(commentaire) {
+  await write([
+    { table: 'commentaires', row: { id: commentaire.id, deleted: true } },
+    ...commentaire.photos.map((p) => ({ table: 'photos', row: { id: p.id, deleted: true } })),
+  ]);
+  for (const p of commentaire.photos) await supprimerFichierPhoto(p.chemin);
 }
 
 export const updateArticle = (id, patch) => update('articles', id, patch);
@@ -128,7 +180,6 @@ export async function duplicate(deplacementId, data, opts) {
   return id;
 }
 
-export const createDeplacement = (nom, date_debut) => insert('deplacements', { nom, date_debut: date_debut || null, statut: 'en_preparation' });
 export const setStatut = (dep, statut) => update('deplacements', dep.id, { statut });
 
 /** Lieux / appartements : renommer, supprimer avec réaffectation éventuelle. */
