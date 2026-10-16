@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useData } from '../data.js';
-import { STATUTS, TYPES, TYPE_ICON } from '../../shared/schema.js';
+import { TYPES, TYPE_ICON } from '../../shared/schema.js';
 import { findSameName, matchesSearch, similarity, STRONG } from '../../shared/match.js';
 import { Button, Empty, Icon, Segmented, TextField, TYPE_OPTIONS } from '../components/ui.jsx';
 import { BulkBar } from '../components/BulkBar.jsx';
@@ -9,15 +9,13 @@ import { ArticleCreator } from '../components/ArticleCreator.jsx';
 import { ArticleEditor } from './ArticleEditor.jsx';
 import * as A from '../actions.js';
 import { logout } from '../db.js';
-import { csvCatalogue, csvTout, download, jsonBackup, loadingListText, shareText } from '../export.js';
+import { csvCatalogue, csvTout, download, jsonBackup } from '../export.js';
 
 const PAGES = [
-  ['deplacements', 'Déplacements', 'calendar'],
   ['modeles', 'Tâches types', 'tasks'],
-  ['catalogue', "Catalogue d'articles", 'box'],
   ['lieux', 'Lieux de stockage', 'pin'],
   ['categories', "Catégories d'articles", 'edit'],
-  ['appartements', 'Appartements / sites', 'home'],
+  ['appartements', 'Biens (appartements, sites)', 'home'],
   ['fusion', 'Fusionner des doublons', 'merge'],
   ['export', 'Exporter / sauvegarder', 'download'],
 ];
@@ -33,8 +31,6 @@ export function PlusView({ theme, setTheme }) {
           <Icon name="back" /> Retour
         </button>
         <h1 className="text-2xl font-bold">{title}</h1>
-        {page === 'deplacements' && <Deplacements />}
-        {page === 'catalogue' && <Catalogue />}
         {page === 'lieux' && <NamedList table="lieux" usedBy="articles" field="lieu_id" />}
         {page === 'categories' && <NamedList table="categories" usedBy="articles" field="categorie_id" />}
         {page === 'modeles' && <Modeles />}
@@ -71,76 +67,8 @@ export function PlusView({ theme, setTheme }) {
   );
 }
 
-function Deplacements() {
-  const { data, depId, setDepId } = useData();
-  const [nom, setNom] = useState('');
-  const [date, setDate] = useState('');
-  const create = async () => {
-    if (!nom.trim()) return;
-    const id = await A.createDeplacement(nom.trim(), date);
-    setNom('');
-    setDate('');
-    setDepId(id);
-  };
-  const dup = async (d) => {
-    const n = prompt('Nom du nouveau déplacement :', `${d.nom} (copie)`);
-    if (!n?.trim()) return;
-    const id = await A.duplicate(d.id, data, { nom: n.trim(), date_debut: null });
-    setDepId(id);
-  };
-  const del = async (d) => {
-    const nb = data.taches.filter((t) => t.deplacement_id === d.id).length;
-    if (!confirm(`Supprimer « ${d.nom} » et ses ${nb} tâche(s) ? Le catalogue d'articles est conservé.`)) return;
-    const ids = new Set(data.taches.filter((t) => t.deplacement_id === d.id).map((t) => t.id));
-    for (const t of data.taches.filter((x) => ids.has(x.id))) await A.deleteTache(t, data.tache_articles.filter((l) => l.tache_id === t.id));
-    await A.remove('deplacements', d.id);
-    if (depId === d.id) setDepId(data.deplacements.find((x) => x.id !== d.id)?.id ?? null);
-  };
-  return (
-    <div className="space-y-4">
-      <ul className="space-y-2">
-        {data.deplacements.map((d) => {
-          const current = d.id === depId;
-          return (
-            <li key={d.id} className={`rounded-2xl bg-white p-3 shadow-sm dark:bg-slate-900 ${current ? 'ring-2 ring-sky-500' : ''}`}>
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <p className="text-lg font-semibold">{d.nom}</p>
-                  <p className="text-sm text-slate-500">
-                    {d.date_debut ? new Date(d.date_debut).toLocaleDateString('fr-FR') + ' · ' : ''}
-                    {STATUTS[d.statut]} · {data.taches.filter((t) => t.deplacement_id === d.id).length} tâches
-                  </p>
-                </div>
-                {current ? <span className="rounded-full bg-sky-100 px-2 py-1 text-xs font-bold text-sky-800 dark:bg-sky-500/20 dark:text-sky-300">Actuel</span> : <Button variant="primary" onClick={() => setDepId(d.id)}>Ouvrir</Button>}
-              </div>
-              <div className="mt-2 flex flex-wrap gap-2">
-                <Button onClick={() => dup(d)}>Dupliquer</Button>
-                {d.statut === 'en_preparation' && <Button onClick={() => A.setStatut(d, 'en_cours')}>Démarrer</Button>}
-                {d.statut !== 'termine' ? (
-                  <Button onClick={() => A.setStatut(d, 'termine')}>Clôturer</Button>
-                ) : (
-                  <Button onClick={() => A.setStatut(d, 'en_preparation')}>Rouvrir</Button>
-                )}
-                <Button variant="ghost" icon="trash" aria-label="Supprimer" className="!text-red-600" onClick={() => del(d)} />
-              </div>
-            </li>
-          );
-        })}
-      </ul>
-      <div className="space-y-2 rounded-2xl bg-white p-3 shadow-sm dark:bg-slate-900">
-        <p className="font-semibold">Nouveau déplacement (vide)</p>
-        <TextField value={nom} onChange={setNom} placeholder="Ex. : Pau, novembre 2026" />
-        <input type="date" className="w-full" value={date} onChange={(e) => setDate(e.target.value)} aria-label="Date de début" />
-        <Button variant="primary" icon="plus" className="w-full" onClick={create} disabled={!nom.trim()}>
-          Créer
-        </Button>
-        <p className="text-sm text-slate-500">Astuce : « Dupliquer » reprend toutes les tâches avec les cases « Pris » remises à zéro.</p>
-      </div>
-    </div>
-  );
-}
-
-function Catalogue() {
+/** Catalogue (inventaire) : tout ce que l'on possède, sans case « Pris ». */
+export function Catalogue() {
   const { data } = useData();
   const [q, setQ] = useState('');
   const [type, setType] = useState('tous');
@@ -297,7 +225,7 @@ function Modeles() {
   return (
     <div className="space-y-3">
       <p className="text-sm text-slate-500">
-        Une tâche type regroupe des articles que tu réutilises souvent. Dans Tâches, le bouton + te la propose. Tu peux aussi enregistrer n'importe quelle tâche comme tâche type depuis sa fiche.
+        Une tâche type regroupe des articles que tu réutilises souvent. Le bouton + des tâches te la propose. Tu peux aussi enregistrer n'importe quelle tâche comme tâche type depuis sa fiche.
       </p>
       <ul className="space-y-2">
         {data.modeles.map((m) => {
@@ -392,25 +320,13 @@ function Fusion() {
 }
 
 function Export() {
-  const { data, trip, dep } = useData();
+  const { data } = useData();
   const stamp = new Date().toISOString().slice(0, 10);
   return (
     <div className="space-y-3">
       <section className="space-y-2 rounded-2xl bg-white p-3 shadow-sm dark:bg-slate-900">
-        <h2 className="font-semibold">Liste de chargement – {dep?.nom}</h2>
-        <Button icon="share" className="w-full" onClick={() => shareText(loadingListText(dep, trip, data.lieux))}>
-          Partager le reste à charger (WhatsApp…)
-        </Button>
-        <Button icon="share" className="w-full" onClick={() => shareText(loadingListText(dep, trip, data.lieux, { onlyMissing: false }))}>
-          Partager la liste complète
-        </Button>
-        <Button icon="download" className="w-full" onClick={() => window.print()}>
-          PDF / Imprimer
-        </Button>
-      </section>
-      <section className="space-y-2 rounded-2xl bg-white p-3 shadow-sm dark:bg-slate-900">
         <h2 className="font-semibold">Toutes les données</h2>
-        <Button icon="download" className="w-full" onClick={() => download(`deplacements-taches-${stamp}.csv`, csvTout(data))}>
+        <Button icon="download" className="w-full" onClick={() => download(`taches-${stamp}.csv`, csvTout(data))}>
           CSV : tâches et articles
         </Button>
         <Button icon="download" className="w-full" onClick={() => download(`catalogue-${stamp}.csv`, csvCatalogue(data))}>

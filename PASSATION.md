@@ -70,49 +70,28 @@ Ne jamais demander ni stocker la clé `service_role` / secret.
 - Hypothèse à faire valider : la ponceuse et la meuleuse utilisent des « Batteries 12V chargées » (accessoire pré-rempli).
 - L'installation de la PWA hors ligne (service worker) n'a pas pu être testée dans le navigateur intégré : à tester sur téléphone une fois l'appli publiée.
 
-## 6. Prochain chantier : les interventions (décidé, pas commencé)
+## 6. Interventions (fait le 16/10/2026, session cloud)
 
-### Besoin exprimé
-- Les **tâches** deviennent une **liste générale** (le « backlog »), indépendante des déplacements. Chaque tâche a une **date d'échéance** (date théorique de réalisation ; pas de date d'intervention sur la tâche), un **statut** (**À traiter / Terminée / Reportée**), des **commentaires horodatés** comme dans Todoist, et des **cases à cocher dans la description** (procédure, sous-étapes à cocher sur place).
-- Les **interventions** remplacent les « déplacements » : date d'intervention, statut, ensemble de tâches. Une intervention peut couvrir plusieurs biens (ex. un voyage qui regroupe plusieurs biens d'une même ville).
-- **Création d'une intervention** (décidé : **uniquement depuis l'intervention**) : « Nouvelle intervention », puis choix des tâches avec des filtres :
-  - par **biens**, en **choix multiples** (aujourd'hui le filtre en haut n'en permet qu'un) ;
-  - par **date d'échéance**.
-- **Tâches proposées** dans ce choix :
-  - d'abord celles **jamais planifiées** et celles **reportées** ;
-  - les tâches terminées n'apparaissent pas ;
-  - celles déjà prévues dans une **autre intervention ouverte** sont accessibles mais **dans une section séparée** ; en choisir une affiche « Retirer cette tâche de l'intervention X pour l'attribuer à la nouvelle ? », et si oui on la déplace.
-- **Dans une intervention** : ses tâches, le matériel, l'outillage et les consommables nécessaires, avec les cases « Pris » propres à l'intervention, la checklist de chargement, et un onglet **Récap** qui résume tous les commentaires des tâches de l'intervention, sans avoir à ouvrir chaque tâche.
-- **Compte rendu d'intervention** : une zone de commentaires (compte rendu) avec **photos**, pour produire un **rapport d'intervention** (imprimable en PDF).
-- **Clôture** (décidé : **liste à confirmer**) : l'appli liste les tâches non terminées, cochées « Reportée » par défaut ; l'utilisateur ajuste puis valide. Une tâche reportée reste ouverte et pourra entrer dans une nouvelle intervention ; l'intervention clôturée garde son historique.
-- Les onglets généraux Matériel et Outillage deviennent l'**inventaire** de ce qu'il possède (catalogue), sans case « Pris ».
+Codé selon les décisions ci-dessous, testé en mode démo au format téléphone (création, déplacement d'une tâche « prévue ailleurs », étapes cochées, commentaire avec photo, récap, clôture). **Pas encore testé avec la vraie base.**
 
-### Décisions prises
-- **Navigation (décidée)** : barre du bas `Tâches · Interventions · Catalogue · Plus`. Une intervention ouverte affiche « ‹ Retour, nom, statut » et ses propres onglets `Tâches · Matériel · Outillage · Conso. · Charger · Récap`.
-- **Photos (décidé)** : on peut en joindre à **n'importe quel commentaire** (de tâche ou de compte rendu d'intervention) ; elles apparaissent toutes dans le Récap et dans le rapport.
-- **Clôture (décidée)** : liste à confirmer, « Reportée » par défaut.
-- **Création (décidée)** : uniquement depuis l'intervention (pas de sélection de tâches depuis la liste des tâches pour créer une intervention).
+- **Modèle** : `taches.statut` (`a_traiter | reportee | terminee`) et `taches.echeance` ; nouvelles tables `intervention_taches` (id `intervention~tache`, `resultat` gardé à la clôture = historique), `commentaires` (horodatés par `created_at` ; `tache_id` vide = compte rendu) et `photos` (fichier dans le bucket Storage privé `photos`, copie locale dans la table Dexie `photo_fichiers`, envoi à la synchro, compression 1600 px JPEG).
+- **Logique** : `shared/interventions.js` (candidats, déplacement, clôture, récap, cases `- [ ]` dans la description). Les tâches des anciens déplacements restent visibles par un « lien hérité » tant que la migration SQL n'est pas faite. 14 tests (`tests/interventions.test.js`).
+- **Écrans** : barre du bas `Tâches · Interventions · Catalogue · Plus` ; intervention ouverte : `Tâches · Matériel · Outillage · Conso. · Charger · Récap` ; clôture à confirmer (« Reportée » par défaut) ; rapport imprimable depuis Récap.
+- **Synchro** : si une table ou une colonne manque côté Supabase, l'appli continue, garde les lignes en attente et affiche « Base à mettre à jour ».
 
-### Proposition de modèle (à affiner)
-- Garder la table `deplacements`, renommée « Intervention » dans l'interface, pour conserver `prise_articles` et l'existant. Ajouter `date_intervention` (ou réutiliser `date_debut`) et un champ `compte_rendu` si besoin.
-- `taches` : ajouter `statut` (`a_traiter | terminee | reportee`, en migrant `fait = true` vers `terminee`) et `echeance` (date). `deplacement_id` devient inutile, au profit d'une table de liaison.
-- Nouvelle table `intervention_taches` (`id = intervention~tache`, `intervention_id`, `tache_id`, `resultat`, `ordre`), qui garde l'**historique**. Une tâche est « planifiée » si elle a un lien vers une intervention non terminée. La déplacer = supprimer (logiquement) l'ancien lien et en créer un nouveau. Migration : un lien pour chaque tâche actuelle du déplacement existant (le seul en base).
-- `computeTrip(interventionId)` : prendre les tâches via `intervention_taches` au lieu de `taches.deplacement_id`.
-- Nouvelle table `commentaires` (`tache_id` facultatif, `intervention_id`, `texte`, `auteur`, `created_at` = horodatage). Pour un commentaire de tâche, enregistrer l'intervention active à ce moment-là ; le Récap = commentaires de l'intervention.
-- Photos : bucket **Supabase Storage** privé (`photos`) + table `photos` (`commentaire_id`, `chemin`, `legende`). Compresser côté client (environ 1600 px, JPEG). Prévoir une file d'envoi hors ligne (blobs dans IndexedDB). Les politiques sur `storage.objects` (réservées à `authenticated`) peuvent se créer en SQL.
-- Cases à cocher dans la description : les lignes `- [ ] étape` / `- [x] étape` s'affichent comme des cases cochables (le clic réécrit la description), avec un bouton « + Étape à cocher » dans l'éditeur.
-- Penser à mettre à jour : la fusion d'articles, `duplicateTrip` (dupliquer une intervention = copier ses liens de tâches ?), les exports CSV et la recherche (afficher le statut et l'intervention).
+### À faire par l'utilisateur
+- Coller **`supabase/schema.sql`** dans Supabase (SQL Editor → Run). Idempotent : crée les tables, migre `fait` → `statut`, crée les liens des anciens déplacements et le bucket `photos`.
 
-### Questions encore ouvertes (à poser à l'utilisateur)
-- Que devient « Dupliquer un déplacement » avec ce modèle ? Faut-il le garder ?
-- Faut-il garder les interventions « En préparation / En cours / Terminée », ou ajouter « Planifiée » ?
+### Questions encore ouvertes
+- « Dupliquer un déplacement » a été retiré de l'interface (fonction `duplicateTrip` conservée) : à confirmer.
+- Statuts d'intervention gardés : En préparation / En cours / Terminée (pas de « Planifiée »).
 
 ## 7. Commandes
 
 ```bash
 npm install
 npm run dev            # http://localhost:5173/Claude/deplacements/
-npm test               # 21 tests
+npm test               # 35 tests
 npm run build          # dist/ pour GitHub Pages
 npm run schema         # régénère supabase/schema.sql depuis shared/schema.js
 BASE=/ VITE_DEMO=1 npx vite build --outDir dist-demo   # version démo locale sans Supabase

@@ -1,6 +1,7 @@
 // Exports : texte partageable (WhatsApp), CSV, JSON.
 import { groupByLieu, formatQty } from '../shared/calc.js';
 import { STATUTS, TYPES, TYPE_ICON } from '../shared/schema.js';
+import { STATUTS_TACHE, liens, statutTache } from '../shared/interventions.js';
 
 export function loadingListText(dep, trip, lieux, { onlyMissing = true } = {}) {
   const items = onlyMissing ? trip.items.filter((i) => !i.status.complet) : trip.items;
@@ -43,7 +44,7 @@ export function download(filename, content, type = 'text/csv;charset=utf-8') {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-/** CSV de tout : une ligne par (déplacement, tâche, article). */
+/** CSV de tout : une ligne par (tâche, article), avec l'intervention la plus récente de la tâche. */
 export function csvTout(data) {
   const by = (list) => new Map(list.map((x) => [x.id, x]));
   const deps = by(data.deplacements);
@@ -52,16 +53,22 @@ export function csvTout(data) {
   const lieux = by(data.lieux);
   const prises = new Map(data.prise_articles.map((p) => [`${p.deplacement_id}~${p.article_id}`, p]));
   const cats = by(data.categories);
-  const rows = [['Déplacement', 'Statut', 'Tâche', 'Appartement', 'Fait', 'Description', 'Article', 'Type', 'Catégorie', 'Quantité', 'Unité', 'Lieu', 'Pris', 'Quantité prise']];
+  const tousLiens = liens(data);
+  const interventionDe = (t) => tousLiens
+    .filter((l) => l.tache_id === t.id)
+    .map((l) => deps.get(l.intervention_id))
+    .filter(Boolean)
+    .sort((a, b) => (b.date_debut || '').localeCompare(a.date_debut || ''))[0];
+  const rows = [['Tâche', 'Statut', 'Échéance', 'Bien', 'Intervention', 'Statut intervention', 'Description', 'Article', 'Type', 'Catégorie', 'Quantité', 'Unité', 'Lieu', 'Pris', 'Quantité prise']];
   for (const t of data.taches) {
-    const dep = deps.get(t.deplacement_id);
+    const dep = t.modele ? null : interventionDe(t);
     const links = data.tache_articles.filter((l) => l.tache_id === t.id);
-    const base = [t.modele ? 'Tâche type' : dep?.nom, t.modele ? '' : STATUTS[dep?.statut], t.titre, apps.get(t.appartement_id)?.nom, !!t.fait, t.description];
+    const base = [t.titre, t.modele ? 'Tâche type' : STATUTS_TACHE[statutTache(t)], t.echeance, apps.get(t.appartement_id)?.nom, dep?.nom, STATUTS[dep?.statut], t.description];
     if (!links.length) rows.push(base);
     for (const l of links) {
       const a = arts.get(l.article_id);
       if (!a) continue;
-      const p = prises.get(`${t.deplacement_id}~${a.id}`);
+      const p = dep ? prises.get(`${dep.id}~${a.id}`) : null;
       rows.push([...base, a.nom, TYPES[a.type], cats.get(a.categorie_id)?.nom, String(l.quantite).replace('.', ','), a.unite, lieux.get(a.lieu_id)?.nom, !!p?.pris, p?.quantite_prise]);
     }
   }

@@ -2,17 +2,17 @@ import { useState } from 'react';
 import { useData } from '../data.js';
 import { TYPE_ICON } from '../../shared/schema.js';
 import { matchesSearch } from '../../shared/match.js';
+import { STATUTS_TACHE, planification, statutTache } from '../../shared/interventions.js';
 import { Sheet, TextField, Empty } from '../components/ui.jsx';
 import { TacheEditor } from './TacheEditor.jsx';
 import { ArticleEditor } from './ArticleEditor.jsx';
 
-/** Recherche globale : tâches (tous déplacements), articles, lieux. */
+/** Recherche globale : tâches, articles, lieux. */
 export function SearchView({ onClose }) {
   const { data } = useData();
   const [q, setQ] = useState('');
   const [tache, setTache] = useState(null);
   const [article, setArticle] = useState(null);
-  const deps = new Map(data.deplacements.map((d) => [d.id, d.nom]));
   const lieux = new Map(data.lieux.map((l) => [l.id, l.nom]));
   const has = q.trim().length > 0;
   const taches = has ? data.taches.filter((t) => matchesSearch(`${t.titre} ${t.description ?? ''}`, q)).slice(0, 20) : [];
@@ -29,8 +29,11 @@ export function SearchView({ onClose }) {
             {taches.map((t) => (
               <li key={t.id}>
                 <button type="button" onClick={() => setTache(t)} className="min-h-12 w-full rounded-xl bg-white px-3 py-2 text-left dark:bg-slate-900">
-                  <span className={`block font-medium ${t.fait ? 'line-through opacity-60' : ''}`}>{t.titre}</span>
-                  <span className="text-xs text-slate-500">{t.modele ? '📋 Tâche type' : deps.get(t.deplacement_id)}</span>
+                  <span className={`block font-medium ${statutTache(t) === 'terminee' ? 'line-through opacity-60' : ''}`}>{t.titre}</span>
+                  <span className="text-xs text-slate-500">
+                    {t.modele ? '📋 Tâche type' : STATUTS_TACHE[statutTache(t)]}
+                    {!t.modele && planification(t.id, data) ? ` · 🚐 ${planification(t.id, data).nom}` : ''}
+                  </span>
                 </button>
               </li>
             ))}

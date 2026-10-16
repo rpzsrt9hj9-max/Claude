@@ -123,7 +123,9 @@ export function NouveauCommentaire({ tacheId = null, interventionId = null, plac
           multiple
           hidden
           onChange={(e) => {
-            setFichiers((fs) => [...fs, ...e.target.files]);
+            // Copier la liste avant de vider le champ (sinon elle est vide au moment de la lecture).
+            const choisis = [...e.target.files];
+            setFichiers((fs) => [...fs, ...choisis]);
             e.target.value = '';
           }}
         />
