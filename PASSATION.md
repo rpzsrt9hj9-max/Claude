@@ -87,7 +87,7 @@ Codé selon les décisions ci-dessous, testé en mode démo au format téléphon
 - Statuts d'intervention : En préparation / En cours / Terminée : validés.
 
 ### Prochaine mise à jour prévue
-- Ajouter une **date de planification** aux interventions (à préciser avec l'utilisateur : en plus de la « date d'intervention » actuelle, stockée dans `deplacements.date_debut`, ou à la place ?).
+- « Date de planification » = la date d'intervention déjà existante (`deplacements.date_debut`), confirmé par l'utilisateur : rien à ajouter au modèle.
 
 ## 7. Commandes
 
