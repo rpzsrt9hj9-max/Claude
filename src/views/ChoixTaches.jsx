@@ -10,15 +10,21 @@ import { STATUTS_TACHE, candidats, enRetard, statutTache } from '../../shared/in
  * les choisir les déplace (après confirmation).
  * intervention : ligne existante, ou null pendant la création.
  */
-export function ChoixTaches({ intervention, titre = 'Ajouter des tâches', bouton = 'Ajouter', onClose, onValider, enTete }) {
+export function ChoixTaches({ intervention, titre = 'Ajouter des tâches', bouton = 'Ajouter', onClose, onValider, enTete, biensParDefaut }) {
   const { data } = useData();
-  const [biens, setBiens] = useLocalState('choix-biens', []);
+  // Filtre de biens mémorisé, sauf si un filtre de départ est imposé (ex. bien de l'intervention).
+  const [biensMemo, setBiensMemo] = useLocalState('choix-biens', []);
+  const [biensLocaux, setBiensLocaux] = useState(biensParDefaut ?? []);
+  const biens = biensParDefaut ? biensLocaux : biensMemo;
+  const setBiens = biensParDefaut ? setBiensLocaux : setBiensMemo;
   const [echeanceMax, setEcheanceMax] = useState('');
   const [choix, setChoix] = useState(() => new Set());
   const [envoi, setEnvoi] = useState(false);
   const appById = useMemo(() => new Map(data.appartements.map((a) => [a.id, a])), [data.appartements]);
 
-  const { libres, ailleurs } = candidats(intervention?.id ?? null, data, { appartements: biens, echeanceMax: echeanceMax || null });
+  // intervention : ligne, liste d'ids (toutes les interventions d'un déplacement) ou null
+  const cibles = Array.isArray(intervention) ? intervention : intervention?.id ?? null;
+  const { libres, ailleurs } = candidats(cibles, data, { appartements: biens, echeanceMax: echeanceMax || null });
   const basculer = (id) =>
     setChoix((s) => {
       const n = new Set(s);
@@ -27,8 +33,7 @@ export function ChoixTaches({ intervention, titre = 'Ajouter des tâches', bouto
     });
   const choisirAilleurs = ({ tache, intervention: autre }) => {
     if (choix.has(tache.id)) return basculer(tache.id);
-    const cible = intervention ? `« ${intervention.nom} »` : 'la nouvelle';
-    if (confirm(`Retirer « ${tache.titre} » de l'intervention « ${autre.nom} » pour l'attribuer à ${cible} ?`)) basculer(tache.id);
+    if (confirm(`Retirer « ${tache.titre} » de l'intervention « ${autre.nom} » pour l'attribuer à ce déplacement ?`)) basculer(tache.id);
   };
   const toutLibre = libres.length > 0 && libres.every((t) => choix.has(t.id));
 

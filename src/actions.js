@@ -4,6 +4,8 @@ import { priseId, tacheArticleId, accessoireId, defaultCumul, uuid } from '../sh
 import { findSameName } from '../shared/match.js';
 import { mergeArticles, duplicateTrip, copyTache } from '../shared/ops.js';
 import { ajouterTaches, retirerTache, cloturer, planification, decocherTout } from '../shared/interventions.js';
+import { creerVoyage, rangerDansVoyage, affecterTache, interventionsDuVoyage } from '../shared/voyages.js';
+import { reporterSurTache } from '../shared/modeles.js';
 import { stockerPhoto, compresserPhoto, supprimerFichierPhoto } from './db.js';
 
 /** Fixe la quantité prise d'un article ; « pris » est vrai quand la quantité totale est atteinte. */
@@ -106,11 +108,53 @@ export async function saveAsModele(draft, links) {
 /** Crée une tâche à partir d'une tâche type (et l'ajoute à l'intervention si elle est donnée). */
 export async function createFromModele(modele, data, interventionId, appartement_id, ordre) {
   const links = data.tache_articles.filter((l) => l.tache_id === modele.id);
-  const { id, writes } = copyTache(modele, links, { deplacement_id: null, appartement_id: appartement_id || null, modele: false, statut: 'a_traiter', ordre });
+  const { id, writes } = copyTache(modele, links, { deplacement_id: null, appartement_id: appartement_id || null, modele: false, modele_id: modele.id, statut: 'a_traiter', ordre });
   if (interventionId) writes.push(...ajouterTaches(interventionId, [id], { ...data, taches: [...data.taches, writes[0].row] }));
   await write(writes);
   return id;
 }
+
+/** Crée plusieurs tâches d'un coup à partir de tâches types. */
+export async function createFromModeles(modeles, data, interventionId, appartement_id) {
+  const ids = [];
+  for (const m of modeles) ids.push(await createFromModele(m, data, interventionId, appartement_id, 0));
+  return ids;
+}
+
+/** Reporte les modifications d'une tâche type sur les tâches ouvertes choisies. */
+export const propagerModele = (taches, diff, data, modeleId) => write(taches.flatMap((t) => reporterSurTache(t, diff, data, modeleId)));
+
+// ---------- Déplacements (un par voyage, une intervention par bien) ----------
+
+export async function createVoyage({ nom, date_debut }, tacheIds, data) {
+  const { id, writes } = creerVoyage({ nom, date_debut: date_debut || null }, tacheIds, data);
+  await write(writes);
+  return id;
+}
+export const addTachesToVoyage = (voyage, tacheIds, data) => write(rangerDansVoyage(voyage, tacheIds, data).writes);
+export const affecter = (tacheId, voyageId, data) => write(affecterTache(tacheId, voyageId, data));
+
+/** Renomme / redate un déplacement ; la date est reportée sur ses interventions. */
+export async function updateVoyage(voyage, { nom, date_debut }, data) {
+  const its = interventionsDuVoyage(voyage.id, data);
+  const writes = its.map((i) => ({ table: 'deplacements', row: { id: i.id, date_debut: date_debut || null } }));
+  if (voyage.virtuel) writes.push({ table: 'deplacements', row: { id: voyage.id, nom } });
+  else writes.push({ table: 'voyages', row: { id: voyage.id, nom, date_debut: date_debut || null } });
+  await write(writes);
+}
+
+/** Supprime un déplacement et ses interventions ; les tâches restent dans la liste générale. */
+export async function deleteVoyage(voyage, data) {
+  for (const i of interventionsDuVoyage(voyage.id, data)) await deleteIntervention(i, data);
+  if (!voyage.virtuel) await remove('voyages', voyage.id);
+}
+
+/** Démarre (ou remet en préparation) toutes les interventions ouvertes d'un déplacement. */
+export const setStatutVoyage = (voyage, statut, data) =>
+  write(interventionsDuVoyage(voyage.id, data).filter((i) => i.statut !== 'termine').map((i) => ({ table: 'deplacements', row: { id: i.id, statut } })));
+
+/** Inclure / exclure un commentaire ou une photo du rapport. */
+export const setDansRapport = (table, id, dans_rapport) => update(table, id, { dans_rapport });
 
 // ---------- Interventions ----------
 

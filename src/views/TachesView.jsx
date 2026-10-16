@@ -5,13 +5,15 @@ import { Etapes } from '../components/Etapes.jsx';
 import { TacheEditor } from './TacheEditor.jsx';
 import { ChoixModele, dateCourte } from './BacklogView.jsx';
 import { ChoixTaches } from './ChoixTaches.jsx';
-import { saveTache, setStatutTache, createFromModele, addTachesToIntervention, removeTacheFromIntervention } from '../actions.js';
+import { saveTache, setStatutTache, createFromModeles, addTachesToIntervention, addTachesToVoyage, removeTacheFromIntervention } from '../actions.js';
+import { bienIntervention, interventionsDuVoyage } from '../../shared/voyages.js';
 import { TYPES, TYPE_ICON, TYPE_ORDER } from '../../shared/schema.js';
 import { STATUTS_TACHE, enRetard, statutTache } from '../../shared/interventions.js';
 
 /** Onglet « Tâches » d'une intervention. */
 export function TachesView() {
-  const { data, trip, depId, dep } = useData();
+  const { data, trip, dep, voyage, interventionId } = useData();
+  const bien = bienIntervention(dep, data);
   const [filtre, setFiltre] = useLocalState('filtre-appartement', '');
   const [masquerFaites, setMasquerFaites] = useLocalState('masquer-faites', false);
   const [editing, setEditing] = useState(null); // id de tâche | 'new' | null
@@ -44,8 +46,8 @@ export function TachesView() {
 
   const quickAdd = async () => {
     if (!quick.trim()) return;
-    const id = await saveTache({ titre: quick, description: '', appartement_id: filtreActif || null, links: [] }, [], 0);
-    await addTachesToIntervention(depId, [id], { ...data, taches: [...data.taches, { id }] });
+    const id = await saveTache({ titre: quick, description: '', appartement_id: filtreActif || bien || null, links: [] }, [], 0);
+    await addTachesToIntervention(interventionId, [id], { ...data, taches: [...data.taches, { id }] });
     setQuick('');
   };
 
@@ -57,7 +59,7 @@ export function TachesView() {
 
       {ouverte && (
         <Button variant="primary" icon="plus" className="w-full !min-h-14 text-lg" onClick={() => setAjout(true)}>
-          Ajouter des tâches de la liste
+          Ajouter des tâches
         </Button>
       )}
 
@@ -110,7 +112,7 @@ export function TachesView() {
                 key={t.tache.id}
                 info={t}
                 onOpen={() => setEditing(t.tache.id)}
-                onRemove={ouverte ? () => confirm(`Retirer « ${t.tache.titre} » de l'intervention ? Elle reste dans la liste des tâches.`) && removeTacheFromIntervention(depId, t.tache.id, data) : null}
+                onRemove={ouverte ? () => confirm(`Retirer « ${t.tache.titre} » de l'intervention ? Elle reste dans la liste des tâches.`) && removeTacheFromIntervention(interventionId, t.tache.id, data) : null}
               />
             ))}
           </ul>
@@ -129,7 +131,7 @@ export function TachesView() {
       )}
 
       {(editing === 'new' || editingTache) && (
-        <TacheEditor key={editing} tache={editingTache} defaultAppartementId={filtreActif} interventionId={depId} onClose={() => setEditing(null)} onOpen={(id) => setEditing(id)} />
+        <TacheEditor key={editing} tache={editingTache} defaultAppartementId={filtreActif || bien} interventionId={interventionId} onClose={() => setEditing(null)} onOpen={(id) => setEditing(id)} />
       )}
       {choosing && (
         <ChoixModele
@@ -138,19 +140,21 @@ export function TachesView() {
             setChoosing(false);
             setEditing('new');
           }}
-          onModele={async (m) => {
-            const id = await createFromModele(m, data, depId, filtreActif, 0);
+          onModeles={async (modeles) => {
+            const ids = await createFromModeles(modeles, data, interventionId, filtreActif || bien);
             setChoosing(false);
-            setEditing(id);
+            if (ids.length === 1) setEditing(ids[0]);
           }}
         />
       )}
       {ajout && (
         <ChoixTaches
-          intervention={dep}
+          intervention={interventionsDuVoyage(voyage.id, data).map((i) => i.id)}
+          biensParDefaut={bien ? [bien] : undefined}
           onClose={() => setAjout(false)}
           onValider={async (ids) => {
-            await addTachesToIntervention(depId, ids, data);
+            // Chaque tâche rejoint l'intervention de son bien dans ce déplacement.
+            await addTachesToVoyage(voyage, ids, data);
             setAjout(false);
           }}
         />

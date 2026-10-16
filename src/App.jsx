@@ -3,17 +3,17 @@ import { DataContext, useAllData, useLocalState, useSyncState } from './data.js'
 import { login, sync } from './db.js';
 import { Button, Icon } from './components/ui.jsx';
 import { BacklogView } from './views/BacklogView.jsx';
-import { InterventionsView } from './views/InterventionsView.jsx';
+import { DeplacementsView } from './views/DeplacementsView.jsx';
 import { Catalogue, PlusView } from './views/PlusView.jsx';
 import { SearchView } from './views/SearchView.jsx';
 
 const TABS = [
   ['taches', 'Tâches', 'tasks'],
-  ['interventions', 'Interventions', 'van'],
+  ['deplacements', 'Déplacements', 'van'],
   ['catalogue', 'Catalogue', 'box'],
   ['plus', 'Plus', 'more'],
 ];
-const TITRES = { taches: 'Tâches', interventions: 'Interventions', catalogue: 'Catalogue', plus: 'Plus' };
+const TITRES = { taches: 'Tâches', deplacements: 'Déplacements', catalogue: 'Catalogue', plus: 'Plus' };
 
 export default function App() {
   const s = useSyncState();
@@ -25,8 +25,9 @@ export default function App() {
 
 function Main({ data, sync: syncInfo }) {
   const [stored, setTab] = useLocalState('onglet', 'taches');
-  const tab = TITRES[stored] ? stored : 'taches';
-  const [ouverteId, setOuverteId] = useLocalState('intervention-ouverte', null);
+  const tab = stored === 'interventions' ? 'deplacements' : TITRES[stored] ? stored : 'taches';
+  const [voyageId, setVoyageId] = useLocalState('voyage-ouvert', null);
+  const [interventionId, setInterventionId] = useLocalState('intervention-ouverte', null);
   const [theme, setTheme] = useLocalState('theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light');
   const [search, setSearch] = useState(false);
 
@@ -35,14 +36,13 @@ function Main({ data, sync: syncInfo }) {
   }, [theme]);
 
   const ctx = useMemo(() => ({ data, user: syncInfo.user }), [data, syncInfo.user]);
-  const enIntervention = tab === 'interventions' && data.deplacements.some((d) => d.id === ouverteId);
 
   return (
     <DataContext.Provider value={ctx}>
       <div className="mx-auto min-h-dvh max-w-2xl print:hidden">
         <header className="safe-top sticky top-0 z-40 border-b border-slate-200 bg-slate-50/95 backdrop-blur dark:border-slate-800 dark:bg-slate-950/95">
           <div className="flex items-center gap-2 px-4 py-2">
-            <h1 className="min-w-0 flex-1 truncate text-lg font-bold">{enIntervention ? 'Intervention' : TITRES[tab]}</h1>
+            <h1 className="min-w-0 flex-1 truncate text-lg font-bold">{TITRES[tab]}</h1>
             <SyncBadge s={syncInfo} />
             <Button variant="ghost" icon="search" aria-label="Rechercher" className="!px-2" onClick={() => setSearch(true)} />
           </div>
@@ -51,7 +51,7 @@ function Main({ data, sync: syncInfo }) {
 
         <main className="px-4 pt-4 pb-28">
           {tab === 'taches' && <BacklogView />}
-          {tab === 'interventions' && <InterventionsView ouverteId={ouverteId} setOuverteId={setOuverteId} />}
+          {tab === 'deplacements' && <DeplacementsView voyageId={voyageId} setVoyageId={setVoyageId} interventionId={interventionId} setInterventionId={setInterventionId} />}
           {tab === 'catalogue' && <Catalogue />}
           {tab === 'plus' && <PlusView theme={theme} setTheme={setTheme} />}
         </main>
@@ -65,8 +65,11 @@ function Main({ data, sync: syncInfo }) {
                   key={id}
                   type="button"
                   onClick={() => {
-                    // Toucher « Interventions » quand on y est déjà ramène à la liste.
-                    if (id === 'interventions' && active) setOuverteId(null);
+                    // Toucher « Déplacements » quand on y est déjà remonte d'un niveau.
+                    if (id === 'deplacements' && active) {
+                      if (interventionId) setInterventionId(null);
+                      else setVoyageId(null);
+                    }
                     setTab(id);
                   }}
                   aria-current={active ? 'page' : undefined}

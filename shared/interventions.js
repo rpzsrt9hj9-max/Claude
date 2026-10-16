@@ -70,9 +70,11 @@ export function comparerEcheance(a, b) {
  * filtres = { appartements: Set|Array (vide = tous), echeanceMax: 'AAAA-MM-JJ' | null, sansEcheance: bool }
  */
 export function candidats(interventionId, data, filtres = {}) {
+  // interventionId : une intervention, ou la liste des interventions d'un déplacement
+  const cibles = new Set([interventionId].flat().filter(Boolean));
   const apps = new Set(filtres.appartements || []);
   const tousLiens = liens(data);
-  const deja = new Set(tousLiens.filter((l) => l.intervention_id === interventionId).map((l) => l.tache_id));
+  const deja = new Set(tousLiens.filter((l) => cibles.has(l.intervention_id)).map((l) => l.tache_id));
   const libres = [];
   const ailleurs = [];
   for (const t of tachesGenerales(data)) {
@@ -81,7 +83,7 @@ export function candidats(interventionId, data, filtres = {}) {
     if (filtres.echeanceMax && t.echeance && t.echeance > filtres.echeanceMax) continue;
     if (filtres.echeanceMax && !t.echeance && filtres.sansEcheance === false) continue;
     const autre = planification(t.id, data, tousLiens);
-    if (autre && autre.id !== interventionId) ailleurs.push({ tache: t, intervention: autre });
+    if (autre && !cibles.has(autre.id)) ailleurs.push({ tache: t, intervention: autre });
     else libres.push(t);
   }
   libres.sort(comparerEcheance);
@@ -145,6 +147,12 @@ export function cloturer(interventionId, choix, data) {
   writes.push({ table: 'deplacements', row: { id: interventionId, statut: 'termine' } });
   return writes;
 }
+
+/** Inclus dans le rapport d'intervention (oui par défaut). */
+export const dansRapport = (x) => x.dans_rapport !== false;
+
+/** Nombre de jours depuis la création (created_at en millisecondes). */
+export const joursDepuis = (ms, maintenant = Date.now()) => Math.max(0, Math.floor((maintenant - ms) / 86_400_000));
 
 /** Commentaires (avec photos) d'une tâche, du plus récent au plus ancien. */
 export function commentairesTache(tacheId, data) {

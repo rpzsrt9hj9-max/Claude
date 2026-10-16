@@ -5,7 +5,11 @@ import { accessoiresFor } from '../../shared/ops.js';
 import { TYPES, TYPE_ICON, TYPE_ORDER } from '../../shared/schema.js';
 import { Button, Icon, Sheet, Stepper, TextField } from '../components/ui.jsx';
 import { ArticleCreator } from '../components/ArticleCreator.jsx';
-import { saveTache, deleteTache, duplicateTache, saveAsModele, addTachesToIntervention } from '../actions.js';
+import { saveTache, deleteTache, duplicateTache, saveAsModele, addTachesToIntervention, affecter, propagerModele } from '../actions.js';
+import { listeVoyages, voyageDe, voyageOuvert } from '../../shared/voyages.js';
+import { diffModele, tachesDuModele } from '../../shared/modeles.js';
+import { ArticleEditor } from './ArticleEditor.jsx';
+import { ouverteDepuis } from './BacklogView.jsx';
 import { STATUTS_TACHE, STATUT_ORDER, ajouterEtape, commentairesTache, planification, statutTache, liens } from '../../shared/interventions.js';
 import { Etapes } from '../components/Etapes.jsx';
 import { ListeCommentaires, NouveauCommentaire } from '../components/Commentaires.jsx';
@@ -26,6 +30,14 @@ export function TacheEditor({ tache, modele = !!tache?.modele, defaultAppartemen
   const [links, setLinks] = useState(() => existingLinks.map((l) => ({ article_id: l.article_id, quantite: Number(l.quantite) || 1 })));
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
+  const [propagation, setPropagation] = useState(null); // { diff, cibles } après modification d'une tâche type
+
+  // Déplacement de la tâche (modifiable depuis la fiche)
+  const prevue = tache && !modele ? planification(tache.id, data) : null;
+  const interventionDepart = prevue ?? (interventionId ? data.deplacements.find((d) => d.id === interventionId) : null);
+  const voyageDepart = interventionDepart ? voyageDe(interventionDepart, data) : '';
+  const [voyageId, setVoyageId] = useState(voyageDepart);
+  const voyagesOuverts = listeVoyages(data).filter((v) => voyageOuvert(v.id, data) || v.id === voyageDepart);
 
   const draft = () => ({
     id: tache?.id,
@@ -41,13 +53,31 @@ export function TacheEditor({ tache, modele = !!tache?.modele, defaultAppartemen
   const save = async () => {
     if (!titre.trim()) return;
     setSaving(true);
-    const id = await saveTache(draft(), existingLinks, 0);
-    // Tâche créée depuis une intervention : elle y est ajoutée directement.
-    if (!tache && interventionId) await addTachesToIntervention(interventionId, [id], { ...data, taches: [...data.taches, { id }] });
+    const d = draft();
+    const id = await saveTache(d, existingLinks, 0);
+    const avecTache = { ...data, taches: [...data.taches.filter((t) => t.id !== id), { ...tache, id, appartement_id: d.appartement_id || null }] };
+    if (!modele) {
+      if (!tache && interventionId && voyageId === voyageDepart) {
+        // Tâche créée depuis une intervention : elle y est ajoutée directement.
+        await addTachesToIntervention(interventionId, [id], avecTache);
+      } else if (voyageId !== voyageDepart || (tache && (tache.appartement_id || '') !== (d.appartement_id || '') && voyageId)) {
+        // Nouveau déplacement choisi (ou bien changé) : la tâche rejoint l'intervention de son bien.
+        await affecter(id, voyageId || null, avecTache);
+      }
+    }
+    // Tâche type modifiée : proposer de reporter les changements sur les tâches ouvertes du même type.
+    if (modele && tache) {
+      const diff = diffModele({ liens: existingLinks, description: tache.description }, { liens: d.links, description: d.description });
+      const cibles = tachesDuModele({ ...tache, titre: d.titre }, data);
+      if (!diff.vide && cibles.length) {
+        setPropagation({ diff, cibles, choix: new Set(cibles.map((t) => t.id)) });
+        setSaving(false);
+        return;
+      }
+    }
     onClose();
   };
 
-  const prevue = tache && !modele ? planification(tache.id, data) : null;
   const historique = tache && !modele
     ? liens(data).filter((l) => l.tache_id === tache.id).map((l) => data.deplacements.find((d) => d.id === l.intervention_id)).filter((d) => d && d.statut === 'termine')
     : [];
@@ -110,10 +140,26 @@ export function TacheEditor({ tache, modele = !!tache?.modele, defaultAppartemen
             ))}
           </div>
         )}
-        {prevue && (
-          <p className="rounded-xl bg-sky-100 p-2 text-sm text-sky-900 dark:bg-sky-500/20 dark:text-sky-200">
-            🚐 Prévue dans l'intervention « {prevue.nom} » ({STATUTS[prevue.statut]})
+        {tache && !modele && tache.created_at && (
+          <p className="text-sm text-slate-500">
+            Créée le {new Date(tache.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
+            {statut !== 'terminee' && ` · ouverte depuis ${ouverteDepuis(tache.created_at)}`}
           </p>
+        )}
+        {!modele && (
+          <label className="block">
+            <span className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-400">🚐 Déplacement</span>
+            <select className="w-full" value={voyageId} onChange={(e) => setVoyageId(e.target.value)}>
+              <option value="">— Pas encore planifiée —</option>
+              {voyagesOuverts.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.nom}
+                  {v.date_debut ? ` (${new Date(`${v.date_debut}T00:00`).toLocaleDateString('fr-FR')})` : ''}
+                </option>
+              ))}
+            </select>
+            {prevue && voyageId === voyageDepart && <span className="mt-1 block text-xs text-slate-500">Intervention : {prevue.nom} ({STATUTS[prevue.statut]})</span>}
+          </label>
         )}
         {!modele && (
           <label className="block">
@@ -189,6 +235,81 @@ export function TacheEditor({ tache, modele = !!tache?.modele, defaultAppartemen
           </Button>
         )}
       </div>
+      {propagation && (
+        <Propagation
+          propagation={propagation}
+          setPropagation={setPropagation}
+          onDone={async (choisies) => {
+            if (choisies.length) await propagerModele(choisies, propagation.diff, data, tache.id);
+            onClose();
+          }}
+        />
+      )}
+    </Sheet>
+  );
+}
+
+/** Après modification d'une tâche type : choisir les tâches ouvertes à mettre à jour. */
+function Propagation({ propagation, setPropagation, onDone }) {
+  const { data } = useData();
+  const { diff, cibles, choix } = propagation;
+  const nom = (id) => data.articles.find((a) => a.id === id)?.nom ?? '?';
+  const bien = (t) => data.appartements.find((a) => a.id === t.appartement_id)?.nom ?? 'Sans bien';
+  const basculer = (id) => {
+    const n = new Set(choix);
+    n.has(id) ? n.delete(id) : n.add(id);
+    setPropagation({ ...propagation, choix: n });
+  };
+  const changements = [
+    ...diff.ajouts.map((a) => `+ ${nom(a.article_id)} × ${a.quantite}`),
+    ...diff.quantites.map((a) => `${nom(a.article_id)} : quantité ${a.quantite}`),
+    ...diff.retraits.map((id) => `− ${nom(id)}`),
+    ...diff.etapes.map((e) => `+ étape « ${e} »`),
+  ];
+  return (
+    <Sheet
+      title="Mettre à jour les tâches ouvertes ?"
+      onClose={() => onDone([])}
+      footer={
+        <div className="grid grid-cols-2 gap-2">
+          <Button onClick={() => onDone([])}>Ne rien changer</Button>
+          <Button variant="primary" icon="check" disabled={!choix.size} onClick={() => onDone(cibles.filter((t) => choix.has(t.id)))}>
+            Mettre à jour ({choix.size})
+          </Button>
+        </div>
+      }
+    >
+      <div className="space-y-4">
+        <div className="rounded-2xl bg-violet-50 p-3 text-sm dark:bg-violet-500/10">
+          <p className="mb-1 font-semibold">Modifications de la tâche type :</p>
+          <ul className="list-inside list-disc">
+            {changements.map((c) => (
+              <li key={c}>{c}</li>
+            ))}
+          </ul>
+          <p className="mt-2 text-slate-600 dark:text-slate-400">Les étapes déjà cochées et les commentaires ne sont pas touchés.</p>
+        </div>
+        <ul className="space-y-2">
+          {cibles.map((t) => (
+            <li key={t.id}>
+              <button
+                type="button"
+                aria-pressed={choix.has(t.id)}
+                onClick={() => basculer(t.id)}
+                className={`flex min-h-14 w-full items-center gap-3 rounded-2xl p-2 text-left shadow-sm ${choix.has(t.id) ? 'bg-sky-100 ring-2 ring-sky-500 dark:bg-sky-500/20' : 'bg-white dark:bg-slate-900'}`}
+              >
+                <span className={`flex size-8 shrink-0 items-center justify-center rounded-lg border-2 ${choix.has(t.id) ? 'border-sky-600 bg-sky-600 text-white' : 'border-slate-300 dark:border-slate-600'}`}>
+                  {choix.has(t.id) && <Icon name="check" strokeWidth={3} />}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block font-semibold">{t.titre}</span>
+                  <span className="text-xs text-slate-500">🏠 {bien(t)}</span>
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
     </Sheet>
   );
 }
@@ -198,6 +319,7 @@ function ArticlePicker({ links, setLinks }) {
   const [q, setQ] = useState('');
   const [creating, setCreating] = useState(false);
   const [proposal, setProposal] = useState(null); // { parent, items: [{ article, quantite, checked }] }
+  const [fiche, setFiche] = useState(null); // article ouvert pour modification (dans le catalogue)
   const articleById = useMemo(() => new Map(data.articles.map((a) => [a.id, a])), [data.articles]);
   const linked = new Set(links.map((l) => l.article_id));
 
@@ -250,10 +372,13 @@ function ArticlePicker({ links, setLinks }) {
             <ul className="divide-y divide-slate-200 rounded-2xl bg-white dark:divide-slate-800 dark:bg-slate-900">
               {byType[type].map(({ link: l, article: a }) => (
                 <li key={l.article_id} className="flex items-center gap-2 p-2">
-                  <span className="min-w-0 flex-1">
-                    <span className="block font-medium break-words">{a.nom}</span>
-                    {a.unite && <span className="text-xs text-slate-500">en {a.unite}</span>}
-                  </span>
+                  <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setFiche(a)} aria-label={`Modifier ${a.nom} dans le catalogue`}>
+                    <span className="block font-medium break-words text-sky-800 underline decoration-dotted underline-offset-4 dark:text-sky-300">{a.nom}</span>
+                    <span className="text-xs text-slate-500">
+                      📍 {data.lieux.find((x) => x.id === a.lieu_id)?.nom ?? 'lieu ?'}
+                      {a.unite ? ` · en ${a.unite}` : ''}
+                    </span>
+                  </button>
                   <Stepper value={l.quantite} min={0.001} onChange={(v) => setQty(a.id, v)} />
                   <Button variant="ghost" icon="x" className="!px-2" aria-label={`Retirer ${a.nom}`} onClick={() => removeLink(a.id)} />
                 </li>
@@ -337,6 +462,7 @@ function ArticlePicker({ links, setLinks }) {
           onCancel={() => setCreating(false)}
         />
       )}
+      {fiche && <ArticleEditor article={data.articles.find((x) => x.id === fiche.id) ?? fiche} onClose={() => setFiche(null)} />}
     </section>
   );
 }

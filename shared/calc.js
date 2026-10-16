@@ -16,11 +16,12 @@ export function priseStatus(total, prise) {
 }
 
 /**
- * Calcule tout ce qui dépend d'une intervention (table deplacements).
+ * Calcule les quantités et cases cochées d'une liste de tâches.
+ * deplacementId = clé des cases « Pris » (déplacement, ou cleSortie(intervention) pour « Sorti »).
+ * taches : par défaut, les tâches de l'intervention deplacementId.
  * data = { articles, taches, tache_articles, prise_articles, intervention_taches, lieux } (lignes non supprimées)
  */
-export function computeTrip(deplacementId, data) {
-  const taches = tachesIntervention(deplacementId, data);
+export function computeTrip(deplacementId, data, taches = tachesIntervention(deplacementId, data)) {
   const tacheById = new Map(taches.map((t) => [t.id, t]));
   const articleById = new Map(data.articles.map((a) => [a.id, a]));
   const priseByArticle = new Map(
@@ -102,6 +103,14 @@ export function groupBy(items, list, field) {
     if (!b.ref) return -1;
     return a.ref.nom.localeCompare(b.ref.nom, 'fr');
   });
+}
+
+/** Regroupe des éléments par type (outillage, consommables, matériel), puis par lieu dans chaque type. */
+export function groupByType(items, lieux, ordre = ['outillage', 'consommable', 'materiel']) {
+  return ordre
+    .map((type) => ({ type, items: items.filter((i) => i.article.type === type) }))
+    .filter((g) => g.items.length)
+    .map((g) => ({ ...g, lieux: groupBy(g.items, lieux, 'lieu_id') }));
 }
 
 /** Regroupe des éléments par lieu (les articles sans lieu à la fin). */

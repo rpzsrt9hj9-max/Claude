@@ -2,11 +2,17 @@ import { useMemo, useState } from 'react';
 import { useData, useLocalState } from '../data.js';
 import { BigCheck, Button, Empty, Icon, MicButton, Sheet } from '../components/ui.jsx';
 import { TacheEditor } from './TacheEditor.jsx';
-import { saveTache, setStatutTache, createFromModele } from '../actions.js';
+import { saveTache, setStatutTache, createFromModeles } from '../actions.js';
 import { matchesSearch } from '../../shared/match.js';
 import {
-  STATUTS_TACHE, aujourdhui, comparerEcheance, enRetard, liens, planification, progressionEtapes, statutTache, tachesGenerales,
+  STATUTS_TACHE, aujourdhui, comparerEcheance, enRetard, joursDepuis, liens, planification, progressionEtapes, statutTache, tachesGenerales,
 } from '../../shared/interventions.js';
+
+/** « aujourd'hui », « 1 jour », « 12 jours »… depuis la création. */
+export const ouverteDepuis = (ms) => {
+  const j = joursDepuis(ms);
+  return j === 0 ? "aujourd'hui" : `${j} jour${j > 1 ? 's' : ''}`;
+};
 
 const FILTRES = [
   ['ouvertes', 'À faire'],
@@ -59,6 +65,7 @@ export function BacklogView() {
   const { data } = useData();
   const [biens, setBiens] = useLocalState('filtre-biens', []);
   const [filtre, setFiltre] = useLocalState('filtre-statut', 'ouvertes');
+  const [nonPlanifiees, setNonPlanifiees] = useLocalState('filtre-non-planifiees', false);
   const [q, setQ] = useState('');
   const [quick, setQuick] = useState('');
   const [editing, setEditing] = useState(null); // id | 'new'
@@ -74,6 +81,7 @@ export function BacklogView() {
   const visibles = toutes
     .filter((t) => garder(t, filtre))
     .filter((t) => !biens.length || biens.includes(t.appartement_id || ''))
+    .filter((t) => !nonPlanifiees || !planification(t.id, data, tousLiens))
     .filter((t) => !q.trim() || matchesSearch(`${t.titre} ${t.description ?? ''} ${appById.get(t.appartement_id)?.nom ?? ''}`, q))
     .sort(comparerEcheance);
 
@@ -104,6 +112,14 @@ export function BacklogView() {
             {label} <span className="opacity-60">{compte(id)}</span>
           </button>
         ))}
+        <button
+          type="button"
+          aria-pressed={nonPlanifiees}
+          onClick={() => setNonPlanifiees(!nonPlanifiees)}
+          className={`min-h-10 shrink-0 rounded-full px-4 text-sm font-medium ${nonPlanifiees ? 'bg-sky-600 text-white' : 'bg-white text-slate-600 shadow-sm dark:bg-slate-900 dark:text-slate-300'}`}
+        >
+          {nonPlanifiees ? '✓ ' : ''}Non planifiées
+        </button>
       </div>
 
       <form
@@ -154,10 +170,10 @@ export function BacklogView() {
             setChoosing(false);
             setEditing('new');
           }}
-          onModele={async (m) => {
-            const id = await createFromModele(m, data, null, bienParDefaut, 0);
+          onModeles={async (modeles) => {
+            const ids = await createFromModeles(modeles, data, null, bienParDefaut);
             setChoosing(false);
-            setEditing(id);
+            if (ids.length === 1) setEditing(ids[0]);
           }}
         />
       )}
@@ -172,25 +188,65 @@ function garder(t, filtre) {
   return s === filtre;
 }
 
-export function ChoixModele({ onClose, onVide, onModele }) {
+/** Choix de la nouvelle tâche : vide, ou une ou plusieurs tâches types d'un coup. */
+export function ChoixModele({ onClose, onVide, onModeles }) {
   const { data } = useData();
+  const [choix, setChoix] = useState(() => new Set());
+  const [envoi, setEnvoi] = useState(false);
+  const basculer = (id) =>
+    setChoix((s) => {
+      const n = new Set(s);
+      n.has(id) ? n.delete(id) : n.add(id);
+      return n;
+    });
   return (
-    <Sheet title="Nouvelle tâche" onClose={onClose}>
+    <Sheet
+      title="Nouvelle tâche"
+      onClose={onClose}
+      footer={
+        choix.size > 0 && (
+          <Button
+            variant="primary"
+            icon="plus"
+            className="w-full text-lg"
+            disabled={envoi}
+            onClick={async () => {
+              setEnvoi(true);
+              try {
+                await onModeles(data.modeles.filter((m) => choix.has(m.id)));
+              } finally {
+                setEnvoi(false);
+              }
+            }}
+          >
+            Créer {choix.size} tâche{choix.size > 1 ? 's' : ''}
+          </Button>
+        )
+      }
+    >
       <div className="space-y-2">
-        <Button variant="primary" icon="plus" className="w-full !min-h-14 text-lg" onClick={onVide}>
+        <Button variant="secondary" icon="plus" className="w-full !min-h-14 text-lg" onClick={onVide}>
           Tâche vide
         </Button>
-        <h3 className="pt-3 text-sm font-bold text-slate-500 uppercase">À partir d'une tâche type</h3>
+        <h3 className="pt-3 text-sm font-bold text-slate-500 uppercase">Tâches types (plusieurs choix possibles)</h3>
         {data.modeles.map((m) => {
           const n = data.tache_articles.filter((l) => l.tache_id === m.id).length;
+          const coche = choix.has(m.id);
           return (
-            <button key={m.id} type="button" className="flex min-h-14 w-full items-center gap-3 rounded-2xl bg-white px-4 text-left shadow-sm active:bg-violet-100 dark:bg-slate-900" onClick={() => onModele(m)}>
-              <span className="text-2xl">📋</span>
+            <button
+              key={m.id}
+              type="button"
+              aria-pressed={coche}
+              className={`flex min-h-14 w-full items-center gap-3 rounded-2xl px-3 text-left shadow-sm ${coche ? 'bg-violet-100 ring-2 ring-violet-500 dark:bg-violet-500/20' : 'bg-white dark:bg-slate-900'}`}
+              onClick={() => basculer(m.id)}
+            >
+              <span className={`flex size-8 shrink-0 items-center justify-center rounded-lg border-2 ${coche ? 'border-violet-600 bg-violet-600 text-white' : 'border-slate-300 dark:border-slate-600'}`}>
+                {coche && <Icon name="check" strokeWidth={3} />}
+              </span>
               <span className="flex-1">
-                <span className="block font-semibold">{m.titre}</span>
+                <span className="block font-semibold">📋 {m.titre}</span>
                 <span className="text-sm text-slate-500">{n} article(s)</span>
               </span>
-              <Icon name="chevron" className="size-5 text-slate-400" />
             </button>
           );
         })}
@@ -218,6 +274,7 @@ export function LigneTache({ tache, app, intervention, onOpen, extra }) {
           {tache.echeance && <span className={retard ? 'font-bold text-red-600' : ''}>📅 {dateCourte(tache.echeance)}</span>}
           {s === 'reportee' && <span className="font-semibold text-amber-600">{STATUTS_TACHE.reportee}</span>}
           {intervention && <span className="text-sky-700 dark:text-sky-400">🚐 {intervention.nom}</span>}
+          {!fait && tache.created_at && <span title={`Créée le ${new Date(tache.created_at).toLocaleDateString('fr-FR')}`}>⏳ {ouverteDepuis(tache.created_at)}</span>}
           {etapes.total > 0 && <span>☑️ {etapes.faites}/{etapes.total}</span>}
           {nbArt > 0 && <span>🧰 {nbArt}</span>}
           {nbCom > 0 && <span>💬 {nbCom}</span>}

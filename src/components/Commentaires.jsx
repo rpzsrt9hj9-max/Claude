@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useData } from '../data.js';
 import { urlPhoto } from '../db.js';
-import { addCommentaire, deleteCommentaire } from '../actions.js';
+import { addCommentaire, deleteCommentaire, setDansRapport } from '../actions.js';
+import { dansRapport } from '../../shared/interventions.js';
 import { Button, Icon, MicButton } from './ui.jsx';
 
 export const dateHeure = (ms) =>
@@ -40,10 +41,31 @@ export function Visionneuse({ url, onClose }) {
   );
 }
 
-export function CommentaireItem({ c, titre, onDelete }) {
-  const [vue, setVue] = useState(null);
+/** Case « 📄 Rapport » : inclure / exclure du rapport d'intervention. */
+function CaseRapport({ table, objet, petite }) {
+  const coche = dansRapport(objet);
   return (
-    <li className="rounded-2xl bg-white p-3 shadow-sm dark:bg-slate-900">
+    <button
+      type="button"
+      aria-pressed={coche}
+      aria-label={coche ? 'Retirer du rapport' : 'Mettre dans le rapport'}
+      onClick={() => setDansRapport(table, objet.id, !coche)}
+      className={
+        petite
+          ? `absolute top-1 left-1 flex size-8 items-center justify-center rounded-lg border-2 ${coche ? 'border-white bg-sky-600 text-white' : 'border-white bg-black/40 text-transparent'}`
+          : `flex min-h-9 items-center gap-1 rounded-lg px-2 text-xs font-semibold ${coche ? 'bg-sky-100 text-sky-800 dark:bg-sky-500/20 dark:text-sky-300' : 'bg-slate-100 text-slate-400 line-through dark:bg-slate-800'}`
+      }
+    >
+      {petite ? <Icon name="check" className="size-5" strokeWidth={3} /> : <>📄 Rapport {coche ? '✓' : ''}</>}
+    </button>
+  );
+}
+
+export function CommentaireItem({ c, titre, onDelete, choixRapport }) {
+  const [vue, setVue] = useState(null);
+  const exclu = choixRapport && !dansRapport(c);
+  return (
+    <li className={`rounded-2xl bg-white p-3 shadow-sm dark:bg-slate-900 ${exclu ? 'opacity-60' : ''}`}>
       <div className="mb-1 flex items-center gap-2 text-xs text-slate-500">
         <Icon name="chat" className="size-4" />
         <span className="flex-1">
@@ -51,6 +73,7 @@ export function CommentaireItem({ c, titre, onDelete }) {
           {c.auteur ? ` · ${c.auteur}` : ''}
           {titre ? ` · ${titre}` : ''}
         </span>
+        {choixRapport && <CaseRapport table="commentaires" objet={c} />}
         {onDelete && (
           <button type="button" className="flex size-9 items-center justify-center rounded-lg text-slate-400 active:bg-slate-100 dark:active:bg-slate-800" aria-label="Supprimer le commentaire" onClick={onDelete}>
             <Icon name="trash" className="size-4" />
@@ -60,9 +83,16 @@ export function CommentaireItem({ c, titre, onDelete }) {
       {c.texte && <p className="whitespace-pre-wrap break-words">{c.texte}</p>}
       {c.photos.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-2">
-          {c.photos.map((p) => (
-            <Photo key={p.id} photo={p} onOpen={setVue} />
-          ))}
+          {c.photos.map((p) =>
+            choixRapport ? (
+              <span key={p.id} className={`relative ${dansRapport(p) && !exclu ? '' : 'opacity-50'}`}>
+                <Photo photo={p} onOpen={setVue} />
+                <CaseRapport table="photos" objet={p} petite />
+              </span>
+            ) : (
+              <Photo key={p.id} photo={p} onOpen={setVue} />
+            ),
+          )}
         </div>
       )}
       <Visionneuse url={vue} onClose={() => setVue(null)} />
@@ -141,12 +171,12 @@ export function NouveauCommentaire({ tacheId = null, interventionId = null, plac
 }
 
 /** Fil de commentaires (le plus récent en haut). */
-export function ListeCommentaires({ commentaires, titreDe }) {
+export function ListeCommentaires({ commentaires, titreDe, choixRapport = true }) {
   if (!commentaires.length) return null;
   return (
     <ul className="space-y-2">
       {commentaires.map((c) => (
-        <CommentaireItem key={c.id} c={c} titre={titreDe?.(c)} onDelete={() => confirm('Supprimer ce commentaire ?') && deleteCommentaire(c)} />
+        <CommentaireItem key={c.id} c={c} titre={titreDe?.(c)} choixRapport={choixRapport} onDelete={() => confirm('Supprimer ce commentaire ?') && deleteCommentaire(c)} />
       ))}
     </ul>
   );

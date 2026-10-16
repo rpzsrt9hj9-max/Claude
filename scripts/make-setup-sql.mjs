@@ -67,6 +67,60 @@ begin
   on conflict (id) do nothing;
 end $$;
 
+-- ---------- Migration : interventions -> déplacements (une intervention par bien) ----------
+do $$
+declare maintenant bigint := (extract(epoch from now()) * 1000)::bigint;
+begin
+  -- Chaque intervention sans déplacement devient un déplacement de même identifiant
+  -- (les cases « Pris » déjà cochées restent ainsi valables pour la liste de chargement).
+  insert into public.voyages (id, nom, date_debut, created_at, updated_at, deleted)
+  select d.id, d.nom, d.date_debut, d.created_at, maintenant, false
+  from public.deplacements d
+  where d.voyage_id is null and coalesce(d.deleted, false) = false
+  on conflict (id) do nothing;
+  update public.deplacements set voyage_id = id, updated_at = maintenant
+  where voyage_id is null and coalesce(deleted, false) = false;
+
+  -- Bien de l'intervention quand toutes ses tâches sont du même bien
+  update public.deplacements d set appartement_id = x.bien, updated_at = maintenant
+  from (
+    select l.intervention_id, min(t.appartement_id) as bien
+    from public.intervention_taches l join public.taches t on t.id = l.tache_id
+    where coalesce(l.deleted, false) = false and t.appartement_id is not null
+    group by l.intervention_id
+    having count(distinct t.appartement_id) = 1
+       and count(*) = (select count(*) from public.intervention_taches l2
+                       where l2.intervention_id = l.intervention_id and coalesce(l2.deleted, false) = false)
+  ) x
+  where d.id = x.intervention_id and d.appartement_id is null;
+
+  -- Interventions à plusieurs biens : une nouvelle intervention par bien, dans le même déplacement
+  create temp table _a_scinder on commit drop as
+    select l.id as lien_id, l.intervention_id, l.tache_id, l.resultat, l.ordre, t.appartement_id as bien,
+           d.nom, d.date_debut, d.statut, d.voyage_id, d.id || '~' || t.appartement_id as nouvelle_id
+    from public.intervention_taches l
+    join public.taches t on t.id = l.tache_id
+    join public.deplacements d on d.id = l.intervention_id
+    where coalesce(l.deleted, false) = false and coalesce(d.deleted, false) = false
+      and d.appartement_id is null and t.appartement_id is not null;
+  insert into public.deplacements (id, nom, date_debut, statut, voyage_id, appartement_id, created_at, updated_at, deleted)
+  select distinct s.nouvelle_id, s.nom || ' – ' || coalesce(a.nom, '?'), s.date_debut, s.statut, s.voyage_id, s.bien, maintenant, maintenant, false
+  from _a_scinder s left join public.appartements a on a.id = s.bien
+  on conflict (id) do nothing;
+  insert into public.intervention_taches (id, intervention_id, tache_id, resultat, ordre, created_at, updated_at, deleted)
+  select s.nouvelle_id || '~' || s.tache_id, s.nouvelle_id, s.tache_id, s.resultat, s.ordre, maintenant, maintenant, false
+  from _a_scinder s
+  on conflict (id) do nothing;
+  update public.intervention_taches set deleted = true, updated_at = maintenant
+  where id in (select lien_id from _a_scinder);
+  -- Commentaires de compte rendu : restent sur l'ancienne intervention (toujours visible dans le déplacement)
+  -- Anciennes interventions devenues vides (toutes leurs tâches ont un bien) : supprimées
+  update public.deplacements d set deleted = true, updated_at = maintenant
+  where d.id in (select distinct intervention_id from _a_scinder)
+    and not exists (select 1 from public.intervention_taches l where l.intervention_id = d.id and coalesce(l.deleted, false) = false)
+    and not exists (select 1 from public.commentaires c where c.intervention_id = d.id and c.tache_id is null and coalesce(c.deleted, false) = false);
+end $$;
+
 -- ---------- Photos : bucket privé Supabase Storage, réservé aux comptes connectés ----------
 insert into storage.buckets (id, name, public) values ('photos', 'photos', false) on conflict (id) do nothing;
 drop policy if exists "photos lecture" on storage.objects;

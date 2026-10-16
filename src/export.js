@@ -1,16 +1,19 @@
 // Exports : texte partageable (WhatsApp), CSV, JSON.
-import { groupByLieu, formatQty } from '../shared/calc.js';
+import { groupByType, formatQty } from '../shared/calc.js';
 import { STATUTS, TYPES, TYPE_ICON } from '../shared/schema.js';
 import { STATUTS_TACHE, liens, statutTache } from '../shared/interventions.js';
 
 export function loadingListText(dep, trip, lieux, { onlyMissing = true } = {}) {
   const items = onlyMissing ? trip.items.filter((i) => !i.status.complet) : trip.items;
   const lines = [`🚗 ${dep.nom} – à charger (${items.length})`, ''];
-  for (const g of groupByLieu(items, lieux)) {
-    lines.push(`📍 ${g.lieu ? g.lieu.nom : 'Lieu non renseigné'}`);
-    for (const i of g.items) {
-      const reste = i.status.etat === 'partiel' ? ` (reste ${formatQty(i.total - i.status.taken, i.article.unite)})` : '';
-      lines.push(`${i.status.complet ? '☑' : '☐'} ${TYPE_ICON[i.article.type]} ${i.article.nom} × ${formatQty(i.total, i.article.unite)}${reste}`);
+  for (const gt of groupByType(items, lieux)) {
+    lines.push(`${TYPE_ICON[gt.type]} ${TYPES[gt.type].toUpperCase()}`);
+    for (const g of gt.lieux) {
+      lines.push(`📍 ${g.lieu ? g.lieu.nom : 'Lieu non renseigné'}`);
+      for (const i of g.items) {
+        const reste = i.status.etat === 'partiel' ? ` (reste ${formatQty(i.total - i.status.taken, i.article.unite)})` : '';
+        lines.push(`${i.status.complet ? '☑' : '☐'} ${i.article.nom} × ${formatQty(i.total, i.article.unite)}${reste}`);
+      }
     }
     lines.push('');
   }

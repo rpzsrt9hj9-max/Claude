@@ -8,27 +8,32 @@ export const TABLES = {
   articles: ['nom', 'type', 'lieu_id', 'categorie_id', 'notes', 'unite', 'cumul_quantites'],
   // Accessoires proposés avec un article (ex. meuleuse -> disques à meuler, batterie)
   article_accessoires: ['article_id', 'accessoire_id', 'quantite'],
+  // Déplacement (voyage) : regroupe une intervention par bien ; porte la liste de chargement.
+  voyages: ['nom', 'date_debut'],
   // Interventions (nom historique de la table : « deplacements ») ; date_debut = date d'intervention.
-  deplacements: ['nom', 'date_debut', 'statut'],
+  // voyage_id = déplacement parent ; appartement_id = bien de l'intervention.
+  deplacements: ['nom', 'date_debut', 'statut', 'voyage_id', 'appartement_id'],
   // Liste générale des tâches. Une tâche type (modèle) a modele = true.
   // statut : a_traiter | reportee | terminee ; echeance : AAAA-MM-JJ.
   // deplacement_id et fait : anciens champs, conservés pour les données existantes.
-  taches: ['deplacement_id', 'titre', 'description', 'appartement_id', 'fait', 'ordre', 'modele', 'statut', 'echeance'],
+  // modele_id = tâche type d'origine (pour reporter les modifications du modèle).
+  taches: ['deplacement_id', 'titre', 'description', 'appartement_id', 'fait', 'ordre', 'modele', 'statut', 'echeance', 'modele_id'],
   tache_articles: ['tache_id', 'article_id', 'quantite'],
   prise_articles: ['deplacement_id', 'article_id', 'pris', 'quantite_prise'],
   // Tâches d'une intervention (gardé après clôture : historique). resultat = statut donné à la clôture.
   intervention_taches: ['intervention_id', 'tache_id', 'resultat', 'ordre'],
   // Commentaires horodatés (created_at) : d'une tâche (tache_id) ou du compte rendu (tache_id vide).
   // intervention_id = intervention ouverte au moment du commentaire.
-  commentaires: ['tache_id', 'intervention_id', 'texte', 'auteur'],
+  // dans_rapport = false : exclu du rapport d'intervention (inclus par défaut).
+  commentaires: ['tache_id', 'intervention_id', 'texte', 'auteur', 'dans_rapport'],
   // Photos jointes à un commentaire ; le fichier est dans le bucket Supabase Storage « photos ».
-  photos: ['commentaire_id', 'chemin', 'legende'],
+  photos: ['commentaire_id', 'chemin', 'legende', 'dans_rapport'],
 };
 
 export const TABLE_NAMES = Object.keys(TABLES);
 
 // Champs booléens et numériques (pour la génération du schéma SQL)
-export const BOOL_FIELDS = new Set(['cumul_quantites', 'fait', 'pris', 'deleted', 'modele']);
+export const BOOL_FIELDS = new Set(['cumul_quantites', 'fait', 'pris', 'deleted', 'modele', 'dans_rapport']);
 export const REAL_FIELDS = new Set(['quantite', 'quantite_prise', 'ordre']);
 
 export const STATUTS = {
@@ -48,6 +53,8 @@ export const defaultCumul = (type) => type !== 'outillage';
 export const tacheArticleId = (tacheId, articleId) => `${tacheId}~${articleId}`;
 export const accessoireId = (articleId, accessoireIdValue) => `${articleId}~${accessoireIdValue}`;
 export const priseId = (deplacementId, articleId) => `${deplacementId}~${articleId}`;
+// Cases « Sorti de la voiture » d'une intervention : même table que « Pris », clé distincte.
+export const cleSortie = (interventionId) => `sortir~${interventionId}`;
 export const interventionTacheId = (interventionId, tacheId) => `${interventionId}~${tacheId}`;
 
 export function uuid() {

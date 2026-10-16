@@ -89,12 +89,29 @@ Codé selon les décisions ci-dessous, testé en mode démo au format téléphon
 ### Prochaine mise à jour prévue
 - « Date de planification » = la date d'intervention déjà existante (`deplacements.date_debut`), confirmé par l'utilisateur : rien à ajouter au modèle.
 
+## 6 bis. Déplacements + versions (mise à jour du 16/10/2026, soir)
+
+Décisions de l'utilisateur : **toujours un déplacement** (une intervention par bien, créées automatiquement) ; tâche type modifiée → **demander à chaque fois** quelles tâches ouvertes mettre à jour ; commentaires et photos **inclus par défaut** dans le rapport (case à décocher).
+
+- **Modèle** : table `voyages` (déplacement : `nom`, `date_debut`) ; `deplacements` (= interventions) gagne `voyage_id` et `appartement_id` ; `taches.modele_id` ; `commentaires.dans_rapport`, `photos.dans_rapport`. Cases « Sorti de la voiture » : `prise_articles` avec la clé `sortir~<intervention>` (`cleSortie`) ; cases « Pris » (chargement) : clé = id du déplacement.
+- **Compatibilité** : une intervention sans déplacement est montrée comme un déplacement « virtuel » de même id (`shared/voyages.js`), qui devient réel dès qu'on lui ajoute un autre bien. La migration SQL fait la même chose (déplacement de même id) et scinde les anciennes interventions à plusieurs biens (`<id>~<bien>`). Migration testée deux fois de suite sur PGlite (Postgres en mémoire).
+- **Écrans** : onglet `Déplacements` → liste → déplacement (`Interventions · Matériel · Outillage · Conso. · Charger`) → intervention (`Tâches · À sortir · Récap`). Charger groupé par type puis lieu. Tâche : date de création + « ouverte depuis », choix du déplacement, articles cliquables (fiche catalogue). Tâches : filtre « Non planifiées ». Tâches types : sélection multiple ; propagation (`shared/modeles.js`). Clôture groupée par bien.
+- Tests : 45 (`tests/voyages.test.js` en plus).
+
+### Versions conservées
+L'utilisateur demande de **garder la version précédente à chaque mise à jour**. Sur le site : `deplacements/` = version actuelle, `deplacements/v1/` = version précédente (commit `a61ee5f`, compilée avec `BASE=/Claude/deplacements/v1/` et une base locale IndexedDB distincte `deplacements-v1` pour ne pas entrer en conflit). Les étiquettes git (tags) sont refusées par le proxy de la session cloud : noter le commit de chaque version ici.
+
+| Version | Commit | Adresse |
+|---|---|---|
+| v1 (interventions) | `a61ee5f` | /Claude/deplacements/v1/ |
+| v2 (déplacements) | voir l'historique de `claude/deplacements-app` | /Claude/deplacements/ |
+
 ## 7. Commandes
 
 ```bash
 npm install
 npm run dev            # http://localhost:5173/Claude/deplacements/
-npm test               # 35 tests
+npm test               # 45 tests
 npm run build          # dist/ pour GitHub Pages
 npm run schema         # régénère supabase/schema.sql depuis shared/schema.js
 BASE=/ VITE_DEMO=1 npx vite build --outDir dist-demo   # version démo locale sans Supabase

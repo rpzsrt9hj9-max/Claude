@@ -28,6 +28,10 @@ db.version(3).stores({
   photo_fichiers: 'chemin, envoye',
 });
 
+db.version(4).stores({
+  voyages: 'id, _dirty',
+});
+
 export const BUCKET = 'photos';
 
 /** Applique une liste d'écritures { table, row } en une transaction locale. */
