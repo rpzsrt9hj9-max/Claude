@@ -95,6 +95,7 @@ Décisions de l'utilisateur : **toujours un déplacement** (une intervention par
 
 - **Modèle** : table `voyages` (déplacement : `nom`, `date_debut`) ; `deplacements` (= interventions) gagne `voyage_id` et `appartement_id` ; `taches.modele_id` ; `commentaires.dans_rapport`, `photos.dans_rapport`. Cases « Sorti de la voiture » : `prise_articles` avec la clé `sortir~<intervention>` (`cleSortie`) ; cases « Pris » (chargement) : clé = id du déplacement.
 - **Compatibilité** : une intervention sans déplacement est montrée comme un déplacement « virtuel » de même id (`shared/voyages.js`), qui devient réel dès qu'on lui ajoute un autre bien. La migration SQL fait la même chose (déplacement de même id) et scinde les anciennes interventions à plusieurs biens (`<id>~<bien>`). Migration testée deux fois de suite sur PGlite (Postgres en mémoire).
+- **Barre du bas (v3)** : `Tâches · Interventions · Déplacements · Catalogue · Plus` ; l'onglet Interventions liste toutes les interventions (un bien chacune) et ouvre la même fiche que depuis un déplacement.
 - **Écrans** : onglet `Déplacements` → liste → déplacement (`Interventions · Matériel · Outillage · Conso. · Charger`) → intervention (`Tâches · À sortir · Récap`). Charger groupé par type puis lieu. Tâche : date de création + « ouverte depuis », choix du déplacement, articles cliquables (fiche catalogue). Tâches : filtre « Non planifiées ». Tâches types : sélection multiple ; propagation (`shared/modeles.js`). Clôture groupée par bien.
 - Tests : 45 (`tests/voyages.test.js` en plus).
 
@@ -104,7 +105,8 @@ L'utilisateur demande de **garder la version précédente à chaque mise à jour
 | Version | Commit | Adresse |
 |---|---|---|
 | v1 (interventions) | `a61ee5f` | /Claude/deplacements/v1/ |
-| v2 (déplacements) | voir l'historique de `claude/deplacements-app` | /Claude/deplacements/ |
+| v2 (déplacements) | `84e9327` | /Claude/deplacements/v2/ |
+| v3 (onglet Interventions) | voir l'historique de `claude/deplacements-app` | /Claude/deplacements/ |
 
 ## 7. Commandes
 

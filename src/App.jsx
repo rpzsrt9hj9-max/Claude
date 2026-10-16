@@ -3,17 +3,18 @@ import { DataContext, useAllData, useLocalState, useSyncState } from './data.js'
 import { login, sync } from './db.js';
 import { Button, Icon } from './components/ui.jsx';
 import { BacklogView } from './views/BacklogView.jsx';
-import { DeplacementsView } from './views/DeplacementsView.jsx';
+import { DeplacementsView, InterventionsView } from './views/DeplacementsView.jsx';
 import { Catalogue, PlusView } from './views/PlusView.jsx';
 import { SearchView } from './views/SearchView.jsx';
 
 const TABS = [
   ['taches', 'Tâches', 'tasks'],
+  ['interventions', 'Interventions', 'tool'],
   ['deplacements', 'Déplacements', 'van'],
   ['catalogue', 'Catalogue', 'box'],
   ['plus', 'Plus', 'more'],
 ];
-const TITRES = { taches: 'Tâches', deplacements: 'Déplacements', catalogue: 'Catalogue', plus: 'Plus' };
+const TITRES = { taches: 'Tâches', interventions: 'Interventions', deplacements: 'Déplacements', catalogue: 'Catalogue', plus: 'Plus' };
 
 export default function App() {
   const s = useSyncState();
@@ -25,7 +26,8 @@ export default function App() {
 
 function Main({ data, sync: syncInfo }) {
   const [stored, setTab] = useLocalState('onglet', 'taches');
-  const tab = stored === 'interventions' ? 'deplacements' : TITRES[stored] ? stored : 'taches';
+  const tab = TITRES[stored] ? stored : 'taches';
+  const [interventionSeule, setInterventionSeule] = useLocalState('intervention-onglet', null);
   const [voyageId, setVoyageId] = useLocalState('voyage-ouvert', null);
   const [interventionId, setInterventionId] = useLocalState('intervention-ouverte', null);
   const [theme, setTheme] = useLocalState('theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light');
@@ -51,6 +53,7 @@ function Main({ data, sync: syncInfo }) {
 
         <main className="px-4 pt-4 pb-28">
           {tab === 'taches' && <BacklogView />}
+          {tab === 'interventions' && <InterventionsView interventionId={interventionSeule} setInterventionId={setInterventionSeule} />}
           {tab === 'deplacements' && <DeplacementsView voyageId={voyageId} setVoyageId={setVoyageId} interventionId={interventionId} setInterventionId={setInterventionId} />}
           {tab === 'catalogue' && <Catalogue />}
           {tab === 'plus' && <PlusView theme={theme} setTheme={setTheme} />}
@@ -66,6 +69,7 @@ function Main({ data, sync: syncInfo }) {
                   type="button"
                   onClick={() => {
                     // Toucher « Déplacements » quand on y est déjà remonte d'un niveau.
+                    if (id === 'interventions' && active) setInterventionSeule(null);
                     if (id === 'deplacements' && active) {
                       if (interventionId) setInterventionId(null);
                       else setVoyageId(null);

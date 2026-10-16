@@ -7,7 +7,7 @@ import {
   STATUTS_TACHE, STATUT_ORDER, dansRapport, propositionCloture, recap, statutTache, tachesIntervention, liens,
 } from '../../shared/interventions.js';
 import {
-  listeVoyages, interventionsDuVoyage, tachesVoyage, statutVoyage, nomIntervention, bienIntervention,
+  listeVoyages, interventionsDuVoyage, tachesVoyage, statutVoyage, nomIntervention, bienIntervention, voyageDe,
 } from '../../shared/voyages.js';
 import { Button, Empty, Icon, Sheet, TextField } from '../components/ui.jsx';
 import { CommentaireItem, ListeCommentaires, NouveauCommentaire, Photo, dateHeure } from '../components/Commentaires.jsx';
@@ -56,6 +56,57 @@ export function DeplacementsView({ voyageId, setVoyageId, interventionId, setInt
   const intervention = interventionsDuVoyage(voyage.id, data).find((i) => i.id === interventionId);
   if (intervention) return <InterventionDetail voyage={voyage} dep={intervention} onBack={() => setInterventionId(null)} />;
   return <VoyageDetail voyage={voyage} onBack={() => setVoyageId(null)} onOpen={setInterventionId} />;
+}
+
+/** Onglet Interventions : toutes les interventions (un bien chacune), tous déplacements confondus. */
+export function InterventionsView({ interventionId, setInterventionId }) {
+  const { data } = useData();
+  const [voirClos, setVoirClos] = useState(false);
+  const voyages = listeVoyages(data);
+  const voyageDeI = (i) => voyages.find((v) => v.id === voyageDe(i, data));
+  const ouverte = data.deplacements.find((d) => d.id === interventionId);
+  if (ouverte && voyageDeI(ouverte)) return <InterventionDetail voyage={voyageDeI(ouverte)} dep={ouverte} onBack={() => setInterventionId(null)} />;
+
+  const parDate = (a, b) => (a.date_debut || '9999').localeCompare(b.date_debut || '9999') || nomIntervention(a, data).localeCompare(nomIntervention(b, data), 'fr');
+  const ouvertes = data.deplacements.filter((d) => d.statut !== 'termine').sort(parDate);
+  const closes = data.deplacements.filter((d) => d.statut === 'termine').sort((a, b) => -parDate(a, b));
+  const carte = (i) => {
+    const ts = tachesIntervention(i.id, data);
+    const faites = ts.filter((t) => statutTache(t) === 'terminee').length;
+    return (
+      <li key={i.id}>
+        <button type="button" onClick={() => setInterventionId(i.id)} className="flex w-full items-center gap-3 rounded-2xl bg-white p-3 text-left shadow-sm active:bg-slate-100 dark:bg-slate-900 dark:active:bg-slate-800">
+          <Icon name="home" className="size-7 shrink-0 text-sky-600" />
+          <span className="min-w-0 flex-1">
+            <span className="flex items-start justify-between gap-2">
+              <span className="text-lg font-semibold break-words">{nomIntervention(i, data)}</span>
+              <BadgeStatut statut={i.statut} />
+            </span>
+            <span className="block text-sm text-slate-500 first-letter:uppercase">{dateLongue(i.date_debut)}</span>
+            <span className="block text-sm text-slate-500">
+              🚐 {voyageDeI(i)?.nom ?? '—'} · {ts.length} tâche{ts.length > 1 ? 's' : ''} · {faites} terminée{faites > 1 ? 's' : ''}
+            </span>
+          </span>
+          <Icon name="chevron" className="size-5 shrink-0 text-slate-400" />
+        </button>
+      </li>
+    );
+  };
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-slate-500">Une intervention = un bien. Pour en créer, crée un déplacement (onglet Déplacements) et choisis ses tâches.</p>
+      {ouvertes.length === 0 && <Empty>Aucune intervention en cours.</Empty>}
+      <ul className="space-y-2">{ouvertes.map(carte)}</ul>
+      {closes.length > 0 && (
+        <section className="space-y-2">
+          <Button variant="ghost" className="w-full" onClick={() => setVoirClos(!voirClos)}>
+            {voirClos ? 'Masquer' : 'Voir'} les interventions terminées ({closes.length})
+          </Button>
+          {voirClos && <ul className="space-y-2">{closes.map(carte)}</ul>}
+        </section>
+      )}
+    </div>
+  );
 }
 
 function ListeVoyages({ onOpen }) {
@@ -277,7 +328,7 @@ function ReglagesVoyage({ voyage, statut, onClose, onDeleted }) {
 }
 
 /** Une intervention (un bien) : tâches, éléments à sortir de la voiture, récap et rapport. */
-function InterventionDetail({ voyage, dep, onBack }) {
+export function InterventionDetail({ voyage, dep, onBack }) {
   const parent = useData();
   const { data } = parent;
   const [onglet, setOnglet] = useLocalState('onglet-intervention', 'taches');
