@@ -32,6 +32,8 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
+        // Les anciennes versions conservées (v1/, v2/…) ne doivent pas être servies par cette version.
+        navigateFallbackDenylist: [/\/v\d+\//],
       },
     }),
   ],
