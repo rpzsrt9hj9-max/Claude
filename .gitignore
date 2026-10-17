@@ -11,3 +11,4 @@ scripts/*.local.mjs
 mise-a-jour-*.sql
 demo
 dist-demo
+dist-*

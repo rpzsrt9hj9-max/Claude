@@ -1,12 +1,14 @@
 // Actions métier côté client (écritures locales, synchronisées ensuite).
-import { insert, update, remove, write } from './db.js';
+import { db, insert, update, remove, write } from './db.js';
 import { priseId, tacheArticleId, accessoireId, defaultCumul, uuid } from '../shared/schema.js';
 import { findSameName } from '../shared/match.js';
 import { mergeArticles, duplicateTrip, copyTache } from '../shared/ops.js';
 import { ajouterTaches, retirerTache, cloturer, planification, decocherTout } from '../shared/interventions.js';
 import { creerVoyage, rangerDansVoyage, affecterTache, interventionsDuVoyage } from '../shared/voyages.js';
 import { reporterSurTache } from '../shared/modeles.js';
-import { stockerPhoto, compresserPhoto, supprimerFichierPhoto } from './db.js';
+import { stockerPhoto, compresserPhoto, supprimerFichierPhoto, espaceId } from './db.js';
+import { supabase } from './supabase.js';
+import { categoriesDeDepart, planImport } from '../shared/catalogue.js';
 
 /** Fixe la quantité prise d'un article ; « pris » est vrai quand la quantité totale est atteinte. */
 export function setPrise(deplacementId, item, quantite) {
@@ -186,7 +188,8 @@ export async function addCommentaire({ tacheId = null, interventionId = null, te
   const writes = [{ table: 'commentaires', row: { id, tache_id: tacheId, intervention_id: intervention, texte: texte.trim() || null, auteur, deleted: false } }];
   for (const f of fichiers) {
     const photoId = uuid();
-    const chemin = `${intervention ?? 'sans-intervention'}/${photoId}.jpg`;
+    // Les photos sont rangées dans le dossier du compte (règle de sécurité du stockage).
+    const chemin = `${espaceId() ?? 'local'}/${intervention ?? 'sans-intervention'}/${photoId}.jpg`;
     await stockerPhoto(chemin, await compresserPhoto(f));
     writes.push({ table: 'photos', row: { id: photoId, commentaire_id: id, chemin, legende: null, deleted: false } });
   }
@@ -243,3 +246,40 @@ export async function deleteNamed(table, id, data, reassignTo = null) {
 }
 
 export { remove };
+
+
+// ---------- Nouveau compte : catégories de départ et reprise du catalogue partagé ----------
+
+/** Catalogue que l'administrateur propose aux nouveaux comptes (articles, accessoires, tâches types). */
+export async function chargerCatalogue() {
+  const { data, error } = await supabase.rpc('catalogue_partage');
+  if (error) {
+    throw new Error(error.code === 'PGRST202' ? "Le catalogue partagé n'est pas encore disponible (la base doit être mise à jour)." : error.message);
+  }
+  if (!data) throw new Error("Aucun catalogue n'est partagé pour l'instant.");
+  return data;
+}
+
+const ligneLocale = (data) => ({ articles: data.articles, categories: data.categories, taches: data.taches });
+
+/** Reprend une partie du catalogue partagé dans son propre catalogue. */
+export async function importerCatalogue(catalogue, choix, data) {
+  const { writes, stats } = planImport(catalogue, choix, ligneLocale(data));
+  await write(writes);
+  return stats;
+}
+
+/** Premier démarrage : catégories par défaut, et reprise éventuelle d'une partie du catalogue. */
+export async function terminerBienvenue(catalogue, choix, data) {
+  const depart = categoriesDeDepart(espaceId(), data.categories);
+  const writes = [...depart];
+  let stats = null;
+  if (catalogue && choix) {
+    const plan = planImport(catalogue, choix, { ...ligneLocale(data), categories: [...data.categories, ...depart.map((w) => w.row)] });
+    writes.push(...plan.writes);
+    stats = plan.stats;
+  }
+  await write(writes);
+  await db.meta.put({ key: 'onboarding', value: 'fait' });
+  return stats;
+}

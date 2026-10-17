@@ -3,6 +3,7 @@ import { useData } from '../data.js';
 import { urlPhoto } from '../db.js';
 import { addCommentaire, deleteCommentaire, setDansRapport } from '../actions.js';
 import { dansRapport } from '../../shared/interventions.js';
+import { observation } from '../supabase.js';
 import { Button, Icon, MicButton } from './ui.jsx';
 
 export const dateHeure = (ms) =>
@@ -61,6 +62,12 @@ function CaseRapport({ table, objet, petite }) {
   );
 }
 
+/** Auteur d'un commentaire ; en mode « Voir comme », l'administrateur est signalé. */
+function auteurDe(user) {
+  const nom = user?.nom || (user?.email && user.email !== 'demo' ? user.email.split('@')[0] : null);
+  return nom && observation ? `${nom} (admin)` : nom;
+}
+
 export function CommentaireItem({ c, titre, onDelete, choixRapport }) {
   const [vue, setVue] = useState(null);
   const exclu = choixRapport && !dansRapport(c);
@@ -114,7 +121,7 @@ export function NouveauCommentaire({ tacheId = null, interventionId = null, plac
     if (!texte.trim() && !fichiers.length) return;
     setEnvoi(true);
     try {
-      await addCommentaire({ tacheId, interventionId, texte, fichiers, auteur: user?.email && user.email !== 'demo' ? user.email.split('@')[0] : null }, data);
+      await addCommentaire({ tacheId, interventionId, texte, fichiers, auteur: auteurDe(user) }, data);
       setTexte('');
       setFichiers([]);
     } finally {

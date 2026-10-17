@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useData } from '../data.js';
 import { TYPES, TYPE_ICON } from '../../shared/schema.js';
 import { findSameName, matchesSearch, similarity, STRONG } from '../../shared/match.js';
@@ -8,7 +8,12 @@ import { TacheEditor } from './TacheEditor.jsx';
 import { ArticleCreator } from '../components/ArticleCreator.jsx';
 import { ArticleEditor } from './ArticleEditor.jsx';
 import * as A from '../actions.js';
-import { logout } from '../db.js';
+import { actualiserProfil, logout } from '../db.js';
+import { observation } from '../supabase.js';
+import { VERSION } from '../version.js';
+import { FamilleView } from './FamilleView.jsx';
+import { ChoixCatalogue, useCatalogue } from './CatalogueImport.jsx';
+import { compterRetoursNonLus, envoyerRetour, majPrenom } from '../famille.js';
 import { csvCatalogue, csvTout, download, jsonBackup } from '../export.js';
 
 const PAGES = [
@@ -23,8 +28,20 @@ const PAGES = [
 export function PlusView({ theme, setTheme }) {
   const [page, setPage] = useState(null);
   const { user } = useData();
+  const admin = !!user?.admin;
+  const [nonLus, setNonLus] = useState(0);
+  useEffect(() => {
+    if (admin && !observation) compterRetoursNonLus().then(setNonLus).catch(() => {});
+  }, [admin]);
+  // Entrées propres à chaque situation : l'administrateur gère la famille, les autres reprennent le catalogue partagé.
+  const pages = [
+    ...(admin && !observation ? [['famille', 'Famille et retours', 'users']] : []),
+    ...PAGES,
+    ...(!admin && !observation ? [['importer', 'Reprendre du catalogue partagé', 'download']] : []),
+    ...(!observation ? [['retour', 'Envoyer un retour', 'send']] : []),
+  ];
   if (page) {
-    const title = PAGES.find((p) => p[0] === page)[1];
+    const title = pages.find((p) => p[0] === page)?.[1] ?? '';
     return (
       <div className="space-y-4">
         <button type="button" onClick={() => setPage(null)} className="flex min-h-11 items-center gap-1 font-medium text-sky-700 dark:text-sky-400">
@@ -37,17 +54,21 @@ export function PlusView({ theme, setTheme }) {
         {page === 'appartements' && <NamedList table="appartements" usedBy="taches" field="appartement_id" />}
         {page === 'fusion' && <Fusion />}
         {page === 'export' && <Export />}
+        {page === 'famille' && <FamilleView />}
+        {page === 'importer' && <ImporterCatalogue />}
+        {page === 'retour' && <Retour />}
       </div>
     );
   }
   return (
     <div className="space-y-4">
       <ul className="overflow-hidden rounded-2xl bg-white shadow-sm dark:bg-slate-900">
-        {PAGES.map(([id, label, icon]) => (
+        {pages.map(([id, label, icon]) => (
           <li key={id} className="border-b border-slate-100 last:border-0 dark:border-slate-800">
             <button type="button" onClick={() => setPage(id)} className="flex min-h-14 w-full items-center gap-3 px-4 text-left text-lg active:bg-slate-100 dark:active:bg-slate-800">
               <Icon name={icon} className="size-6 text-sky-600" />
               <span className="flex-1">{label}</span>
+              {id === 'famille' && nonLus > 0 && <span className="rounded-full bg-amber-500 px-2 py-0.5 text-xs font-bold text-white">{nonLus}</span>}
               <Icon name="chevron" className="size-5 text-slate-400" />
             </button>
           </li>
@@ -57,12 +78,135 @@ export function PlusView({ theme, setTheme }) {
         <span className="font-medium">Thème</span>
         <Segmented options={[['light', '☀️ Clair'], ['dark', '🌙 Sombre']]} value={theme} onChange={setTheme} />
       </div>
-      <div className="rounded-2xl bg-white p-3 text-sm shadow-sm dark:bg-slate-900">
-        <p className="mb-2 text-slate-500">Connecté : {user?.email}</p>
-        <Button icon="logout" className="w-full" onClick={() => confirm('Se déconnecter ? Les données locales seront effacées de cet appareil.') && logout()}>
-          Se déconnecter
+      <div className="space-y-2 rounded-2xl bg-white p-3 text-sm shadow-sm dark:bg-slate-900">
+        <p className="text-slate-500">
+          Connecté : <b className="text-slate-700 dark:text-slate-200">{user?.nom || user?.email}</b>
+          {user?.nom && <span> ({user.email})</span>}
+          {admin && <span className="ml-1 rounded-full bg-violet-100 px-2 py-0.5 text-xs font-semibold text-violet-800 dark:bg-violet-500/20 dark:text-violet-200">admin</span>}
+        </p>
+        {!observation && user?.id && user.id !== 'demo' && (
+          <Button
+            icon="edit"
+            className="w-full"
+            onClick={async () => {
+              const v = prompt('Ton prénom :', user?.nom ?? '');
+              if (v === null) return;
+              try {
+                await majPrenom(user.id, v);
+                actualiserProfil();
+              } catch (e) {
+                alert(e.message);
+              }
+            }}
+          >
+            Modifier mon prénom
+          </Button>
+        )}
+        {!observation && (
+          <Button icon="logout" className="w-full" onClick={() => confirm('Se déconnecter ? Les données locales seront effacées de cet appareil.') && logout()}>
+            Se déconnecter
+          </Button>
+        )}
+        <p className="text-center text-xs text-slate-400">Version {VERSION}</p>
+      </div>
+    </div>
+  );
+}
+
+/** Reprendre (plus tard) une partie du catalogue partagé par l'administrateur. */
+function ImporterCatalogue() {
+  const { data } = useData();
+  const { chargement, catalogue, erreur } = useCatalogue();
+  const [envoi, setEnvoi] = useState(false);
+  const [stats, setStats] = useState(null);
+  if (chargement) return <Empty>Chargement…</Empty>;
+  if (erreur) return <p className="rounded-xl bg-amber-100 p-3 text-amber-900 dark:bg-amber-500/20 dark:text-amber-200">{erreur}</p>;
+  if (stats) {
+    return (
+      <div className="space-y-3 rounded-2xl bg-emerald-50 p-4 dark:bg-emerald-500/10">
+        <p className="text-lg font-semibold text-emerald-800 dark:text-emerald-300">C'est fait ✓</p>
+        <p>
+          {stats.articles} article(s) ajouté(s), {stats.modeles} tâche(s) type(s) ajoutée(s)
+          {stats.dejaPresents ? `, ${stats.dejaPresents} déjà présent(s)` : ''}
+          {stats.modelesIgnores ? `, ${stats.modelesIgnores} tâche(s) type(s) déjà présente(s)` : ''}.
+        </p>
+        <Button onClick={() => setStats(null)}>Reprendre autre chose</Button>
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-slate-500">
+        Catalogue de {catalogue.proprietaire || "l'administrateur"} : coche ce que tu veux copier dans ton catalogue. Les lieux, notes, biens, tâches et photos ne sont jamais copiés.
+      </p>
+      <ChoixCatalogue
+        catalogue={catalogue}
+        envoi={envoi}
+        onValider={async (choix) => {
+          setEnvoi(true);
+          try {
+            setStats(await A.importerCatalogue(catalogue, choix, data));
+          } finally {
+            setEnvoi(false);
+          }
+        }}
+      />
+    </div>
+  );
+}
+
+/** Retour à l'administrateur : un texte libre, avec l'écran et la version. */
+function Retour() {
+  const [texte, setTexte] = useState('');
+  const [etat, setEtat] = useState('saisie'); // saisie | envoi | envoye
+  const [erreur, setErreur] = useState('');
+  const ecran = (() => {
+    try {
+      return JSON.parse(localStorage.getItem('onglet'));
+    } catch {
+      return null;
+    }
+  })();
+  if (etat === 'envoye') {
+    return (
+      <div className="space-y-3 rounded-2xl bg-emerald-50 p-4 text-center dark:bg-emerald-500/10">
+        <p className="text-4xl">🙏</p>
+        <p className="text-lg font-semibold text-emerald-800 dark:text-emerald-300">Merci pour ton retour !</p>
+        <Button
+          onClick={() => {
+            setTexte('');
+            setEtat('saisie');
+          }}
+        >
+          Envoyer un autre retour
         </Button>
       </div>
+    );
+  }
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-slate-500">Un souci, une idée, quelque chose de pas clair ? Écris-le ici, il arrive directement à l'administrateur.</p>
+      <textarea className="w-full" rows={6} value={texte} onChange={(e) => setTexte(e.target.value)} placeholder="Ce qui marche bien, ce qui coince, ce que tu voudrais…" aria-label="Ton retour" />
+      {erreur && <p className="text-sm text-red-600">{erreur}</p>}
+      <Button
+        variant="primary"
+        icon="send"
+        className="w-full"
+        disabled={!texte.trim() || etat === 'envoi'}
+        onClick={async () => {
+          setEtat('envoi');
+          setErreur('');
+          try {
+            await envoyerRetour(texte, ecran);
+            setEtat('envoye');
+          } catch (e) {
+            setErreur(navigator.onLine ? e.message : 'Pas de réseau : réessaie plus tard.');
+            setEtat('saisie');
+          }
+        }}
+      >
+        {etat === 'envoi' ? 'Envoi…' : 'Envoyer'}
+      </Button>
     </div>
   );
 }

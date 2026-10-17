@@ -3,9 +3,14 @@
 // puis envoyée au serveur dès que le réseau le permet.
 import Dexie from 'dexie';
 import { TABLES, TABLE_NAMES, uuid } from '../shared/schema.js';
-import { supabase, isConfigured } from './supabase.js';
+import { supabase, isConfigured, observation, memoriserObservation, oublierObservation } from './supabase.js';
 
-export const db = new Dexie('deplacements');
+// Chaque espace a sa propre base locale : celle du compte connecté, et une par compte observé
+// (mode « Voir comme » de l'administrateur) pour ne jamais mélanger deux comptes.
+export const db = new Dexie(observation ? `deplacements-obs-${observation.id}` : 'deplacements');
+let monId = null;
+/** Identifiant du compte dont on voit l'espace : le sien, ou celui du compte observé. */
+export const espaceId = () => observation?.id ?? monId;
 db.version(1).stores({
   lieux: 'id, _dirty',
   appartements: 'id, _dirty',
@@ -91,8 +96,8 @@ const PAGE = 1000;
 // que la dernière déjà reçue ; on relit donc un peu en arrière (sans effet si rien n'a changé).
 const OVERLAP = 200;
 
-const toServer = (table, row) => {
-  const out = { id: row.id, created_at: row.created_at, updated_at: row.updated_at, deleted: !!row.deleted };
+const toServer = (table, row, espace) => {
+  const out = { id: row.id, owner_id: espace, created_at: row.created_at, updated_at: row.updated_at, deleted: !!row.deleted };
   for (const f of TABLES[table]) out[f] = row[f] ?? null;
   return out;
 };
@@ -114,6 +119,8 @@ export async function sync() {
     if (!navigator.onLine) return setState({ status: 'offline' });
     const { data: sess } = await supabase.auth.getSession();
     if (!sess.session) return setState({ status: 'idle', authed: false });
+    monId = sess.session.user.id;
+    const espace = espaceId();
     setState({ status: 'syncing' });
     try {
       // 1. Envoi des modifications locales. Une table pas encore créée en base (mise à jour SQL
@@ -122,7 +129,7 @@ export async function sync() {
       for (const t of TABLE_NAMES) {
         const rows = await db[t].where('_dirty').equals(1).toArray();
         for (let i = 0; i < rows.length; i += 500) {
-          const { error } = await supabase.from(t).upsert(rows.slice(i, i + 500).map((r) => toServer(t, r)), { onConflict: 'id' });
+          const { error } = await supabase.from(t).upsert(rows.slice(i, i + 500).map((r) => toServer(t, r, espace)), { onConflict: 'id' });
           if (error && isSchemaError(error)) {
             manquantes.add(t);
             break;
@@ -136,7 +143,7 @@ export async function sync() {
       const incoming = [];
       for (const t of TABLE_NAMES) {
         for (let from = 0; ; from += PAGE) {
-          const { data, error } = await supabase.from(t).select('*').gt('rev', Math.max(0, since - OVERLAP)).order('rev').range(from, from + PAGE - 1);
+          const { data, error } = await supabase.from(t).select('*').eq('owner_id', espace).gt('rev', Math.max(0, since - OVERLAP)).order('rev').range(from, from + PAGE - 1);
           if (error && isSchemaError(error)) {
             manquantes.add(t);
             break;
@@ -159,6 +166,13 @@ export async function sync() {
         }
         // Si une table manque, on ne fait pas avancer la révision : tout sera relu après la mise à jour.
         if (!manquantes.size) await db.meta.put({ key: 'rev', value: maxRev });
+        // Le serveur a-t-il déjà des données pour ce compte ? Sert à n'afficher l'écran de bienvenue qu'à un compte vraiment neuf.
+        const connu = (await db.meta.get('espace'))?.value;
+        if (incoming.length || since > 0) {
+          if (connu !== 'rempli') await db.meta.put({ key: 'espace', value: 'rempli' });
+        } else if (!connu && !manquantes.size) {
+          await db.meta.put({ key: 'espace', value: 'vide' });
+        }
       });
       const photoErreur = await envoyerPhotos();
       const schemaMessage = manquantes.size ? `Base à mettre à jour (${[...manquantes].join(', ')}) : exécute supabase/schema.sql dans Supabase.` : null;
@@ -188,47 +202,177 @@ export function startSyncLoop() {
 
 // ---------- Connexion (Supabase Auth) ----------
 
-const userOf = (session) => (session?.user ? { email: session.user.email, role: session.user.app_metadata?.role ?? 'admin' } : null);
+const userOf = (session) => (session?.user ? { id: session.user.id, email: session.user.email } : null);
 
 // Mode démo local (VITE_DEMO=1) : pas de connexion ni de synchro, pour tester l'interface.
-const DEMO = import.meta.env.VITE_DEMO === '1';
+export const DEMO = import.meta.env.VITE_DEMO === '1';
 if (DEMO) Object.assign(window, { __db: db });
 
+/** Messages d'erreur d'authentification, en français. */
+export function traduireErreurAuth(error) {
+  const m = error?.message || '';
+  const c = error?.code || '';
+  if (c === 'signup_disabled' || /signups? not allowed/i.test(m)) return 'Les inscriptions sont fermées pour le moment.';
+  if (/Database error saving new user/i.test(m)) return 'Code famille incorrect.';
+  if (c === 'user_already_exists' || /already registered/i.test(m)) return 'Un compte existe déjà avec cet e-mail. Connecte-toi.';
+  if (c === 'weak_password' || /password should|at least \d+ characters/i.test(m)) return 'Mot de passe trop court (6 caractères minimum).';
+  if (/rate.?limit/i.test(`${c} ${m}`)) return 'Trop de tentatives. Réessaie dans quelques minutes.';
+  if (c === 'email_address_invalid' || /invalid.*email|email.*invalid/i.test(m)) return 'Adresse e-mail invalide.';
+  if (c === 'email_not_confirmed' || /not confirmed/i.test(m)) return 'Adresse e-mail pas encore confirmée : ouvre le message reçu.';
+  if (/invalid login credentials/i.test(m)) return 'E-mail ou mot de passe incorrect.';
+  return m || 'Une erreur est survenue.';
+}
+
+/** Prénom et statut d'administrateur du compte ; null si la base ne répond pas (hors ligne, pas à jour). */
+async function profilDe(user) {
+  if (DEMO || !navigator.onLine) return null;
+  try {
+    const [adm, prof] = await Promise.all([
+      supabase.from('admins').select('user_id').eq('user_id', user.id).maybeSingle(),
+      supabase.from('profils').select('nom').eq('id', user.id).maybeSingle(),
+    ]);
+    if (adm.error || prof.error) return null;
+    return { admin: !!adm.data, nom: prof.data?.nom ?? null };
+  } catch {
+    return null;
+  }
+}
+
+/** Met à jour l'état avec le profil, et sort du mode « Voir comme » si le compte n'est pas administrateur. */
+async function completerProfil(user) {
+  const profil = await profilDe(user);
+  if (!profil) return user;
+  const complet = { ...user, ...profil };
+  if (observation && !profil.admin) {
+    oublierObservation();
+    location.reload();
+    return complet;
+  }
+  if (!observation) await db.meta.put({ key: 'user', value: complet });
+  setState({ user: complet });
+  return complet;
+}
+
+/** Relit le prénom et le statut d'administrateur (après une modification du profil). */
+export const actualiserProfil = () => (syncState.user?.id ? completerProfil(syncState.user) : null);
+
 export async function checkSession() {
-  if (DEMO) return setState({ authed: true, user: { email: 'demo', role: 'admin' }, status: 'ok' });
+  if (DEMO) {
+    monId = 'demo';
+    return setState({ authed: true, user: { id: 'demo', email: 'demo', admin: true }, status: 'ok' });
+  }
   if (!isConfigured) return setState({ authed: false });
   // La session est gardée sur l'appareil : on démarre même sans réseau, avec les données locales.
   const { data } = await supabase.auth.getSession();
-  const user = userOf(data.session) ?? (await db.meta.get('user'))?.value ?? null;
-  if (data.session && user) {
-    setState({ authed: true, user });
+  const base = userOf(data.session);
+  const cache = (await db.meta.get('user'))?.value ?? null;
+  if (data.session && base) {
+    monId = base.id;
+    setState({ authed: true, user: { ...(cache?.id === base.id ? cache : {}), ...base } });
     sync();
+    completerProfil(base);
   } else {
     setState({ authed: false });
   }
   supabase.auth.onAuthStateChange((event, session) => {
     if (event === 'SIGNED_OUT') setState({ authed: false, user: null });
-    else if (session) setState({ authed: true, user: userOf(session) });
+    else if (session) {
+      monId = session.user.id;
+      setState({ authed: true, user: { ...syncState.user, ...userOf(session) } });
+    }
   });
+}
+
+async function ouvrirSession(session) {
+  const user = userOf(session);
+  monId = user.id;
+  const prev = (await db.meta.get('user'))?.value;
+  if (!observation && prev && prev.email !== user.email) await wipeLocal();
+  await db.meta.put({ key: 'user', value: user });
+  setState({ authed: true, user });
+  await completerProfil(user);
+  await sync();
 }
 
 export async function login(email, password) {
   if (!isConfigured) throw new Error("L'appli n'est pas encore reliée à Supabase (src/supabase.js).");
   const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
-  if (error) throw new Error(error.message === 'Invalid login credentials' ? 'E-mail ou mot de passe incorrect.' : error.message);
-  const user = userOf(data.session);
-  const prev = (await db.meta.get('user'))?.value;
-  if (prev && prev.email !== user.email) await wipeLocal();
-  await db.meta.put({ key: 'user', value: user });
-  setState({ authed: true, user });
-  await sync();
+  if (error) throw new Error(traduireErreurAuth(error));
+  await ouvrirSession(data.session);
+}
+
+/**
+ * Création de compte avec le code famille (vérifié par la base).
+ * Renvoie { confirmation: true } si Supabase demande de confirmer l'adresse e-mail.
+ */
+export async function signup({ nom, email, password, code }) {
+  if (!isConfigured) throw new Error("L'appli n'est pas encore reliée à Supabase (src/supabase.js).");
+  const { data, error } = await supabase.auth.signUp({
+    email: email.trim(),
+    password,
+    options: { data: { nom: nom.trim(), code_famille: code.trim() } },
+  });
+  if (error) throw new Error(traduireErreurAuth(error));
+  // Adresse déjà inscrite : Supabase répond sans erreur mais sans « identité » quand la confirmation est active.
+  if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+    throw new Error('Un compte existe déjà avec cet e-mail. Connecte-toi.');
+  }
+  if (!data.session) return { confirmation: true };
+  await ouvrirSession(data.session);
+  return { confirmation: false };
 }
 
 export async function logout() {
+  if (observation) return quitterObservation();
   await sync();
   await supabase.auth.signOut().catch(() => {});
   await wipeLocal();
+  await supprimerEspacesObserves();
+  // Les écrans mémorisés (onglet, filtres…) appartiennent au compte qui part ; seul le thème est gardé.
+  try {
+    for (const k of Object.keys(localStorage)) if (k !== 'theme') localStorage.removeItem(k);
+  } catch {
+    /* rien */
+  }
   setState({ authed: false, user: null });
+}
+
+/** Administrateur : ouvre l'espace d'un autre compte (l'appli se recharge). */
+export function demarrerObservation(compte) {
+  memoriserObservation(compte);
+  ecranDeDepart();
+  location.reload();
+}
+
+/** Ouvre l'onglet Tâches au prochain démarrage (changement d'espace : on repart du premier écran). */
+function ecranDeDepart() {
+  try {
+    localStorage.setItem('onglet', JSON.stringify('taches'));
+    for (const k of ['voyage-ouvert', 'intervention-ouverte', 'intervention-onglet']) localStorage.removeItem(k);
+  } catch {
+    /* rien */
+  }
+}
+
+/** Revient à son propre espace ; la copie locale du compte observé est effacée. */
+export async function quitterObservation() {
+  await sync().catch(() => {});
+  const reste = await countDirty();
+  if (reste && !confirm(`${reste} modification(s) faites dans ce compte n'ont pas encore été envoyées. Quitter quand même ?`)) return;
+  oublierObservation();
+  ecranDeDepart();
+  db.close();
+  await Dexie.delete(db.name).catch(() => {});
+  location.reload();
+}
+
+async function supprimerEspacesObserves() {
+  oublierObservation();
+  try {
+    for (const nom of await Dexie.getDatabaseNames()) if (nom.startsWith('deplacements-obs-')) await Dexie.delete(nom);
+  } catch {
+    /* rien */
+  }
 }
 
 async function wipeLocal() {

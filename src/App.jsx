@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { DataContext, useAllData, useLocalState, useSyncState } from './data.js';
-import { login, sync } from './db.js';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { DEMO, db, login, quitterObservation, signup, sync } from './db.js';
+import { observation } from './supabase.js';
+import { Bienvenue } from './views/Bienvenue.jsx';
 import { Button, Icon } from './components/ui.jsx';
 import { BacklogView } from './views/BacklogView.jsx';
 import { DeplacementsView, InterventionsView } from './views/DeplacementsView.jsx';
@@ -39,10 +42,28 @@ function Main({ data, sync: syncInfo }) {
 
   const ctx = useMemo(() => ({ data, user: syncInfo.user }), [data, syncInfo.user]);
 
+  // Premier démarrage d'un nouveau compte : après une première synchro réussie, si l'espace est vide.
+  const bienvenue = useLiveQuery(async () => (await db.meta.get('onboarding'))?.value ?? 'non', []);
+  const espaceServeur = useLiveQuery(async () => (await db.meta.get('espace'))?.value ?? 'inconnu', []);
+  const [bienvenueFaite, setBienvenueFaite] = useState(false);
+  const espaceVide = data.categories.length === 0 && data.articles.length === 0 && data.taches.length === 0;
+  const afficherBienvenue = !DEMO && !observation && !bienvenueFaite && espaceServeur === 'vide' && bienvenue === 'non' && espaceVide;
+
   return (
     <DataContext.Provider value={ctx}>
       <div className="mx-auto min-h-dvh max-w-2xl print:hidden">
         <header className="safe-top sticky top-0 z-40 border-b border-slate-200 bg-slate-50/95 backdrop-blur dark:border-slate-800 dark:bg-slate-950/95">
+          {observation && (
+            <div className="flex items-center gap-2 bg-violet-600 px-4 py-2 text-sm text-white">
+              <Icon name="eye" className="size-5 shrink-0" />
+              <span className="min-w-0 flex-1 truncate">
+                Compte de <b>{observation.nom || observation.email}</b>
+              </span>
+              <button type="button" onClick={quitterObservation} className="min-h-9 shrink-0 rounded-lg bg-white/20 px-3 font-semibold active:bg-white/30">
+                Quitter
+              </button>
+            </div>
+          )}
           <div className="flex items-center gap-2 px-4 py-2">
             <h1 className="min-w-0 flex-1 truncate text-lg font-bold">{TITRES[tab]}</h1>
             <SyncBadge s={syncInfo} />
@@ -88,6 +109,7 @@ function Main({ data, sync: syncInfo }) {
         </nav>
       </div>
       {search && <SearchView onClose={() => setSearch(false)} />}
+      {afficherBienvenue && <Bienvenue onTermine={() => setBienvenueFaite(true)} />}
     </DataContext.Provider>
   );
 }
@@ -115,16 +137,32 @@ function Splash() {
 }
 
 function Login() {
+  const [mode, setMode] = useState('connexion'); // connexion | inscription
+  const [nom, setNom] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [code, setCode] = useState('');
+  const [accepte, setAccepte] = useState(false);
   const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
   const [busy, setBusy] = useState(false);
+  const inscription = mode === 'inscription';
   const submit = async (e) => {
     e.preventDefault();
     setBusy(true);
     setError('');
+    setInfo('');
     try {
-      await login(email, password);
+      if (inscription) {
+        const r = await signup({ nom, email, password, code });
+        if (r.confirmation) {
+          setInfo("Un e-mail de confirmation t'a été envoyé. Ouvre-le, puis reviens te connecter ici.");
+          setMode('connexion');
+          setPassword('');
+        }
+      } else {
+        await login(email, password);
+      }
     } catch (err) {
       setError(navigator.onLine ? err.message : 'Pas de réseau : la première connexion nécessite Internet.');
     } finally {
@@ -139,11 +177,49 @@ function Login() {
           <h1 className="text-2xl font-bold">Interventions</h1>
           <p className="text-slate-500">Tâches, matériel et outillage</p>
         </div>
+        <div className="grid grid-cols-2 gap-1 rounded-2xl bg-slate-200 p-1 dark:bg-slate-800" role="tablist">
+          {[['connexion', 'Se connecter'], ['inscription', 'Créer un compte']].map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={mode === id}
+              onClick={() => {
+                setMode(id);
+                setError('');
+                setInfo('');
+              }}
+              className={`min-h-11 rounded-xl text-sm font-semibold ${mode === id ? 'bg-white shadow dark:bg-slate-950' : 'text-slate-600 dark:text-slate-400'}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        {inscription && <input className="w-full" placeholder="Ton prénom" autoComplete="given-name" value={nom} onChange={(e) => setNom(e.target.value)} required />}
         <input type="email" className="w-full" placeholder="E-mail" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required />
-        <input type="password" className="w-full" placeholder="Mot de passe" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+        <input
+          type="password"
+          className="w-full"
+          placeholder={inscription ? 'Mot de passe (6 caractères minimum)' : 'Mot de passe'}
+          autoComplete={inscription ? 'new-password' : 'current-password'}
+          minLength={inscription ? 6 : undefined}
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+        />
+        {inscription && (
+          <>
+            <input className="w-full tracking-widest uppercase" placeholder="Code famille" autoComplete="off" autoCapitalize="characters" value={code} onChange={(e) => setCode(e.target.value)} required />
+            <label className="flex items-start gap-3 text-sm text-slate-600 dark:text-slate-300">
+              <input type="checkbox" className="mt-0.5 size-6 shrink-0 !min-h-0" checked={accepte} onChange={(e) => setAccepte(e.target.checked)} required />
+              <span>J'ai compris que le gestionnaire de l'appli peut consulter et modifier mes données pour m'aider.</span>
+            </label>
+          </>
+        )}
+        {info && <p className="rounded-xl bg-emerald-100 p-3 text-sm text-emerald-900 dark:bg-emerald-500/20 dark:text-emerald-200">{info}</p>}
         {error && <p className="text-sm text-red-600">{error}</p>}
-        <Button type="submit" variant="primary" className="w-full text-lg" disabled={busy}>
-          {busy ? 'Connexion…' : 'Se connecter'}
+        <Button type="submit" variant="primary" className="w-full text-lg" disabled={busy || (inscription && !accepte)}>
+          {busy ? (inscription ? 'Création…' : 'Connexion…') : inscription ? 'Créer mon compte' : 'Se connecter'}
         </Button>
       </form>
     </div>

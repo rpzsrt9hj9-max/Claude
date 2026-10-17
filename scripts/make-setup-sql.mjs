@@ -5,24 +5,140 @@ import fs from 'node:fs';
 import { TABLES, BOOL_FIELDS, REAL_FIELDS } from '../shared/schema.js';
 
 const colType = (f) => (BOOL_FIELDS.has(f) ? 'boolean' : REAL_FIELDS.has(f) ? 'double precision' : 'text');
+const tables = Object.keys(TABLES);
 
 let sql = `-- Schéma de l'application « Déplacements » pour Supabase.
--- À exécuter une fois dans Supabase : SQL Editor > New query > coller > Run.
+-- À exécuter dans Supabase : SQL Editor > New query > coller > Run.
+-- Peut être relancé sans risque : il ne fait que créer ou compléter ce qui manque.
 
 -- Numéro de révision global : le client récupère tout ce qui a changé depuis sa dernière synchro.
 create sequence if not exists app_rev;
 
 -- « Dernière modification gagne » : une écriture plus ancienne que la ligne en base est ignorée
 -- (la ligne reçoit quand même une nouvelle révision pour que le client récupère la bonne version).
+-- Le propriétaire d'une ligne ne change jamais après sa création.
 create or replace function app_lww() returns trigger
 language plpgsql security definer set search_path = public as $$
 begin
-  if tg_op = 'UPDATE' and new.updated_at < old.updated_at then
-    new := old;
+  if tg_op = 'UPDATE' then
+    if new.updated_at < old.updated_at then
+      new := old;
+    end if;
+    if old.owner_id is not null then
+      new.owner_id := old.owner_id;
+    end if;
   end if;
   new.rev := nextval('app_rev');
   return new;
 end $$;
+
+-- ---------- Comptes : administrateur, profils, code famille ----------
+
+-- Administrateur(s) : peuvent consulter et modifier l'espace d'un autre compte.
+create table if not exists public.admins (user_id uuid primary key);
+alter table public.admins enable row level security;
+drop policy if exists "admins lecture" on public.admins;
+create policy "admins lecture" on public.admins for select to authenticated using (user_id = auth.uid());
+grant select on public.admins to authenticated;
+revoke all on public.admins from anon;
+-- Le premier compte créé est l'administrateur (seulement si aucun n'est encore désigné).
+insert into public.admins (user_id)
+  select id from auth.users where not exists (select 1 from public.admins) order by created_at asc limit 1
+  on conflict do nothing;
+
+create or replace function public.est_admin() returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from public.admins where user_id = auth.uid())
+$$;
+
+-- Un espace est visible par son propriétaire ; l'administrateur voit celui du compte nommé dans
+-- l'en-tête « x-observe-user » (envoyé seulement par l'appli en mode « Voir comme »).
+-- Sans cet en-tête, même l'administrateur ne voit que ses propres données : les anciennes
+-- versions de l'appli (v1 à v3) ne mélangent donc jamais les comptes.
+create or replace function public.espace_visible(p_owner uuid) returns boolean
+language sql stable security definer set search_path = public as $$
+  select p_owner = auth.uid()
+      or (public.est_admin()
+          and p_owner::text = nullif(nullif(current_setting('request.headers', true), '')::json ->> 'x-observe-user', ''))
+$$;
+
+-- Profil visible (prénom, e-mail) : le sien, ou tous pour l'administrateur.
+create table if not exists public.profils (
+  id uuid primary key references auth.users (id) on delete cascade,
+  email text,
+  nom text,
+  created_at timestamptz not null default now()
+);
+alter table public.profils enable row level security;
+drop policy if exists "profils lecture" on public.profils;
+create policy "profils lecture" on public.profils for select to authenticated using (id = auth.uid() or public.est_admin());
+drop policy if exists "profils modification" on public.profils;
+create policy "profils modification" on public.profils for update to authenticated using (id = auth.uid()) with check (id = auth.uid());
+grant select on public.profils to authenticated;
+grant update (nom) on public.profils to authenticated;
+revoke all on public.profils from anon;
+
+create or replace function public.nouveau_profil() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  insert into public.profils (id, email, nom)
+  values (new.id, new.email, nullif(trim(coalesce(new.raw_user_meta_data ->> 'nom', '')), ''))
+  on conflict (id) do nothing;
+  return new;
+end $$;
+drop trigger if exists profil_a_la_creation on auth.users;
+create trigger profil_a_la_creation after insert on auth.users for each row execute function public.nouveau_profil();
+insert into public.profils (id, email) select id, email from auth.users on conflict (id) do nothing;
+
+-- Code famille : demandé à l'inscription. Lisible et modifiable par l'administrateur seulement.
+create table if not exists public.reglages_app (cle text primary key, valeur text not null);
+alter table public.reglages_app enable row level security;
+drop policy if exists "reglages admin" on public.reglages_app;
+create policy "reglages admin" on public.reglages_app for all to authenticated using (public.est_admin()) with check (public.est_admin());
+grant select, insert, update on public.reglages_app to authenticated;
+revoke all on public.reglages_app from anon;
+insert into public.reglages_app (cle, valeur)
+  values ('code_famille', upper(substr(md5(random()::text || clock_timestamp()::text), 1, 6)))
+  on conflict (cle) do nothing;
+
+create or replace function public.verifier_code_famille() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare attendu text;
+begin
+  select valeur into attendu from public.reglages_app where cle = 'code_famille';
+  if attendu is null or trim(attendu) = '' then
+    raise exception 'Inscriptions fermées';
+  end if;
+  if upper(trim(coalesce(new.raw_user_meta_data ->> 'code_famille', ''))) <> upper(trim(attendu)) then
+    raise exception 'Code famille incorrect';
+  end if;
+  return new;
+end $$;
+drop trigger if exists verifier_code_famille on auth.users;
+create trigger verifier_code_famille before insert on auth.users for each row execute function public.verifier_code_famille();
+
+-- Retours des utilisateurs (bouton « Envoyer un retour »).
+create table if not exists public.retours (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid(),
+  texte text not null,
+  ecran text,
+  version text,
+  created_at timestamptz not null default now(),
+  lu boolean not null default false
+);
+alter table public.retours enable row level security;
+drop policy if exists "retours ajout" on public.retours;
+create policy "retours ajout" on public.retours for insert to authenticated with check (user_id = auth.uid());
+drop policy if exists "retours lecture" on public.retours;
+create policy "retours lecture" on public.retours for select to authenticated using (user_id = auth.uid() or public.est_admin());
+drop policy if exists "retours admin" on public.retours;
+create policy "retours admin" on public.retours for update to authenticated using (public.est_admin()) with check (public.est_admin());
+grant select, insert on public.retours to authenticated;
+grant update (lu) on public.retours to authenticated;
+revoke all on public.retours from anon;
+
+-- ---------- Données de l'appli : une copie privée par compte ----------
 `;
 
 for (const [table, fields] of Object.entries(TABLES)) {
@@ -36,16 +152,35 @@ ${fields.map((f) => `  ${f} ${colType(f)},`).join('\n')}
   rev bigint
 );
 ${fields.map((f) => `alter table public.${table} add column if not exists ${f} ${colType(f)};`).join('\n')}
+alter table public.${table} add column if not exists owner_id uuid;
+alter table public.${table} alter column owner_id set default auth.uid();
 create index if not exists ${table}_rev on public.${table}(rev);
+create index if not exists ${table}_owner_rev on public.${table}(owner_id, rev);
 drop trigger if exists ${table}_lww on public.${table};
 create trigger ${table}_lww before insert or update on public.${table} for each row execute function app_lww();
 alter table public.${table} enable row level security;
 drop policy if exists "${table} connectés" on public.${table};
-create policy "${table} connectés" on public.${table} for all to authenticated using (true) with check (true);
+drop policy if exists "${table} espace" on public.${table};
+create policy "${table} espace" on public.${table} for all to authenticated
+  using (public.espace_visible(owner_id)) with check (public.espace_visible(owner_id));
 grant select, insert, update on public.${table} to authenticated;
 revoke all on public.${table} from anon;
 `;
 }
+
+// Les données existantes appartiennent à l'administrateur (le premier compte).
+sql += `
+-- ---------- Les données existantes appartiennent à l'administrateur ----------
+do $$
+declare adm uuid;
+begin
+  select user_id into adm from public.admins order by user_id limit 1;
+  if adm is not null then
+${tables.map((t) => `    update public.${t} set owner_id = adm where owner_id is null;`).join('\n')}
+  end if;
+end $$;
+${tables.map((t) => `alter table public.${t} alter column owner_id set not null;`).join('\n')}
+`;
 
 // Migration vers les interventions (idempotente : peut être relancée sans risque).
 // updated_at est mis à « maintenant » pour que la règle « dernière modification gagne » l'accepte.
@@ -58,10 +193,10 @@ begin
   update public.taches set statut = case when fait then 'terminee' else 'a_traiter' end, updated_at = maintenant
   where statut is null and coalesce(modele, false) = false;
   -- Un lien intervention <-> tâche pour chaque tâche d'un ancien déplacement
-  insert into public.intervention_taches (id, intervention_id, tache_id, resultat, ordre, created_at, updated_at, deleted)
+  insert into public.intervention_taches (id, intervention_id, tache_id, resultat, ordre, created_at, updated_at, deleted, owner_id)
   select t.deplacement_id || '~' || t.id, t.deplacement_id, t.id,
          case when d.statut = 'termine' then case when t.fait then 'terminee' else 'reportee' end end,
-         t.ordre, maintenant, maintenant, false
+         t.ordre, maintenant, maintenant, false, t.owner_id
   from public.taches t join public.deplacements d on d.id = t.deplacement_id
   where t.deplacement_id is not null and coalesce(t.modele, false) = false and coalesce(t.deleted, false) = false
   on conflict (id) do nothing;
@@ -73,8 +208,8 @@ declare maintenant bigint := (extract(epoch from now()) * 1000)::bigint;
 begin
   -- Chaque intervention sans déplacement devient un déplacement de même identifiant
   -- (les cases « Pris » déjà cochées restent ainsi valables pour la liste de chargement).
-  insert into public.voyages (id, nom, date_debut, created_at, updated_at, deleted)
-  select d.id, d.nom, d.date_debut, d.created_at, maintenant, false
+  insert into public.voyages (id, nom, date_debut, created_at, updated_at, deleted, owner_id)
+  select d.id, d.nom, d.date_debut, d.created_at, maintenant, false, d.owner_id
   from public.deplacements d
   where d.voyage_id is null and coalesce(d.deleted, false) = false
   on conflict (id) do nothing;
@@ -97,18 +232,18 @@ begin
   -- Interventions à plusieurs biens : une nouvelle intervention par bien, dans le même déplacement
   create temp table _a_scinder on commit drop as
     select l.id as lien_id, l.intervention_id, l.tache_id, l.resultat, l.ordre, t.appartement_id as bien,
-           d.nom, d.date_debut, d.statut, d.voyage_id, d.id || '~' || t.appartement_id as nouvelle_id
+           d.nom, d.date_debut, d.statut, d.voyage_id, d.owner_id, d.id || '~' || t.appartement_id as nouvelle_id
     from public.intervention_taches l
     join public.taches t on t.id = l.tache_id
     join public.deplacements d on d.id = l.intervention_id
     where coalesce(l.deleted, false) = false and coalesce(d.deleted, false) = false
       and d.appartement_id is null and t.appartement_id is not null;
-  insert into public.deplacements (id, nom, date_debut, statut, voyage_id, appartement_id, created_at, updated_at, deleted)
-  select distinct s.nouvelle_id, s.nom || ' – ' || coalesce(a.nom, '?'), s.date_debut, s.statut, s.voyage_id, s.bien, maintenant, maintenant, false
+  insert into public.deplacements (id, nom, date_debut, statut, voyage_id, appartement_id, created_at, updated_at, deleted, owner_id)
+  select distinct s.nouvelle_id, s.nom || ' – ' || coalesce(a.nom, '?'), s.date_debut, s.statut, s.voyage_id, s.bien, maintenant, maintenant, false, s.owner_id
   from _a_scinder s left join public.appartements a on a.id = s.bien
   on conflict (id) do nothing;
-  insert into public.intervention_taches (id, intervention_id, tache_id, resultat, ordre, created_at, updated_at, deleted)
-  select s.nouvelle_id || '~' || s.tache_id, s.nouvelle_id, s.tache_id, s.resultat, s.ordre, maintenant, maintenant, false
+  insert into public.intervention_taches (id, intervention_id, tache_id, resultat, ordre, created_at, updated_at, deleted, owner_id)
+  select s.nouvelle_id || '~' || s.tache_id, s.nouvelle_id, s.tache_id, s.resultat, s.ordre, maintenant, maintenant, false, s.owner_id
   from _a_scinder s
   on conflict (id) do nothing;
   update public.intervention_taches set deleted = true, updated_at = maintenant
@@ -121,16 +256,53 @@ begin
     and not exists (select 1 from public.commentaires c where c.intervention_id = d.id and c.tache_id is null and coalesce(c.deleted, false) = false);
 end $$;
 
--- ---------- Photos : bucket privé Supabase Storage, réservé aux comptes connectés ----------
+-- ---------- Catalogue partagé : ce que l'administrateur propose aux nouveaux comptes ----------
+-- Seuls le nom, le type, la catégorie, l'unité, les accessoires et les tâches types (étapes et matériel)
+-- sont communiqués : jamais les notes, les lieux, les biens, les tâches ni les photos.
+create or replace function public.catalogue_partage() returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare adm uuid;
+begin
+  if auth.uid() is null then
+    raise exception 'Connexion requise';
+  end if;
+  select user_id into adm from public.admins order by user_id limit 1;
+  if adm is null then
+    return null;
+  end if;
+  return jsonb_build_object(
+    'proprietaire', (select coalesce(p.nom, split_part(p.email, '@', 1)) from public.profils p where p.id = adm),
+    'categories', coalesce((select jsonb_agg(jsonb_build_object('id', c.id, 'nom', c.nom) order by c.nom)
+        from public.categories c where c.owner_id = adm and not c.deleted), '[]'::jsonb),
+    'articles', coalesce((select jsonb_agg(jsonb_build_object('id', a.id, 'nom', a.nom, 'type', a.type, 'categorie_id', a.categorie_id,
+        'unite', a.unite, 'cumul_quantites', a.cumul_quantites) order by a.nom)
+        from public.articles a where a.owner_id = adm and not a.deleted), '[]'::jsonb),
+    'accessoires', coalesce((select jsonb_agg(jsonb_build_object('article_id', x.article_id, 'accessoire_id', x.accessoire_id, 'quantite', x.quantite))
+        from public.article_accessoires x where x.owner_id = adm and not x.deleted), '[]'::jsonb),
+    'modeles', coalesce((select jsonb_agg(jsonb_build_object('id', t.id, 'titre', t.titre, 'description', t.description,
+        'besoins', coalesce((select jsonb_agg(jsonb_build_object('article_id', ta.article_id, 'quantite', ta.quantite))
+                             from public.tache_articles ta where ta.tache_id = t.id and not ta.deleted), '[]'::jsonb)) order by t.titre)
+        from public.taches t where t.owner_id = adm and t.modele and not t.deleted), '[]'::jsonb)
+  );
+end $$;
+revoke all on function public.catalogue_partage() from public, anon;
+grant execute on function public.catalogue_partage() to authenticated;
+
+-- ---------- Photos : bucket privé Supabase Storage ----------
+-- Chaque compte écrit et lit dans son dossier (nom = identifiant du compte) ; l'administrateur partout.
 insert into storage.buckets (id, name, public) values ('photos', 'photos', false) on conflict (id) do nothing;
 drop policy if exists "photos lecture" on storage.objects;
-create policy "photos lecture" on storage.objects for select to authenticated using (bucket_id = 'photos');
+create policy "photos lecture" on storage.objects for select to authenticated
+  using (bucket_id = 'photos' and (public.est_admin() or (storage.foldername(name))[1] = auth.uid()::text));
 drop policy if exists "photos ajout" on storage.objects;
-create policy "photos ajout" on storage.objects for insert to authenticated with check (bucket_id = 'photos');
+create policy "photos ajout" on storage.objects for insert to authenticated
+  with check (bucket_id = 'photos' and (public.est_admin() or (storage.foldername(name))[1] = auth.uid()::text));
 drop policy if exists "photos modification" on storage.objects;
-create policy "photos modification" on storage.objects for update to authenticated using (bucket_id = 'photos');
+create policy "photos modification" on storage.objects for update to authenticated
+  using (bucket_id = 'photos' and (public.est_admin() or (storage.foldername(name))[1] = auth.uid()::text));
 drop policy if exists "photos suppression" on storage.objects;
-create policy "photos suppression" on storage.objects for delete to authenticated using (bucket_id = 'photos');
+create policy "photos suppression" on storage.objects for delete to authenticated
+  using (bucket_id = 'photos' and (public.est_admin() or (storage.foldername(name))[1] = auth.uid()::text));
 `;
 
 const seedIdx = process.argv.indexOf('--seed');
@@ -142,12 +314,12 @@ if (seedIdx < 0) {
   const seed = buildSeed();
   const now = Date.now();
   const lit = (v) => (v == null ? 'null' : typeof v === 'boolean' ? String(v) : typeof v === 'number' ? String(v) : `'${String(v).replace(/'/g, "''")}'`);
-  sql += `\n-- Jeu de données de départ (importé seulement si la base est vide)\ndo $$ begin\nif not exists (select 1 from public.deplacements) then\n`;
+  sql += `\n-- Jeu de données de départ (importé seulement si la base est vide ; propriétaire : l'administrateur)\ndo $$ begin\nif not exists (select 1 from public.deplacements) then\n`;
   for (const [table, rows] of Object.entries(seed)) {
     const cols = ['id', ...TABLES[table], 'created_at', 'updated_at'];
     for (const r of rows) {
       const row = { ...r, created_at: now, updated_at: now };
-      sql += `insert into public.${table} (${cols.join(', ')}) values (${cols.map((c) => lit(row[c])).join(', ')});\n`;
+      sql += `insert into public.${table} (${cols.join(', ')}, owner_id) values (${cols.map((c) => lit(row[c])).join(', ')}, (select user_id from public.admins order by user_id limit 1));\n`;
     }
   }
   sql += `end if;\nend $$;\n`;
