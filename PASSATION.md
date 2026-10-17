@@ -108,7 +108,8 @@ L'utilisateur demande de **garder la version précédente à chaque mise à jour
 | v2 (déplacements) | `84e9327` | /Claude/deplacements/v2/ |
 | v3 (onglet Interventions) | `bd21a5c` | /Claude/deplacements/v3/ |
 | v4 (famille, achats, accessoires, dense) | `2265777` | /Claude/deplacements/v4/ |
-| v4.1 (glisser / croix pour supprimer, annuler, statut simplifié) | dernier commit de `claude/deplacements-app` | /Claude/deplacements/ |
+| v4.1 (glisser / croix pour supprimer, annuler, statut simplifié) | `f066d01` | /Claude/deplacements/v4.1/ |
+| v4.2 (Google Sheet du catalogue) | dernier commit de `claude/deplacements-app` | /Claude/deplacements/ |
 
 Pour publier une ancienne version : `git worktree add ../vN <commit>`, y remplacer le nom de la base Dexie `'deplacements'` par `'deplacements-vN'` (src/db.js), puis `BASE=/Claude/deplacements/vN/ npx vite build` et copier `dist/` dans `site/deplacements/vN/`. La version actuelle a `navigateFallbackDenylist: [/\/v\d+\//]` pour que son service worker ne capture pas les anciennes versions.
 
@@ -145,6 +146,14 @@ Une seule version v4 regroupe tout ce qui suit (choix de l'utilisateur). La v3 r
 **Options développeur** (Plus, visibles par tous) : blocage « pris » si à acheter (activé), filtres du catalogue toujours visibles (désactivé).
 
 **Journal des versions** : page « Nouveautés » dans Plus + `CHANGELOG.md` ; une note récapitulative à chaque nouvelle version.
+
+### v4.2 (17/10/2026) : Google Sheet du catalogue
+- Décisions de l'utilisateur : synchro **dans les deux sens**, **seulement à la main** (menu du Sheet), **clé de synchro** (pas de mot de passe), garde-fou **uniquement** pour la suppression d'un article déjà utilisé dans une tâche (les modifications passent sans question).
+- `shared/sheet.js` : toute la logique (comparaison Sheet / serveur / état de la dernière synchro, écritures, lignes à réécrire, journal), testée dans `tests/sheet.test.js`. Conflit : le Sheet l'emporte.
+- `google-sheet/script-source.js` + `scripts/make-apps-script.mjs` -> `google-sheet/Code.gs` (logique empaquetée, à coller dans Extensions > Apps Script). **Régénérer Code.gs après toute modification de shared/sheet.js.** Onglets : Catalogue, Journal, _synchro (caché, empreintes), Mode d'emploi.
+- SQL : table `cles_sheet` (empreinte SHA-256 seulement), `creer_cle_sheet` / `revoquer_cle_sheet` / `etat_cle_sheet` (connecté), `sheet_lire` / `sheet_ecrire` (avec la clé, rôle anon) limitées au catalogue du propriétaire (articles, lieux, catégories, article_accessoires, stocks) ; `tests/securite.mjs` : 45 vérifications.
+- Appli : Plus > Google Sheet du catalogue (`src/views/SheetView.jsx`), masqué en démo et en mode « Voir comme ».
+- Les articles supprimés depuis le Sheet restent récupérables en base (suppression logique `deleted = true`).
 
 ### v4.1 (17/10/2026)
 - `src/components/Glissable.jsx` : ligne glissable (partiel = retirer en bleu, presque complet = supprimer en rouge, liseré à droite) ou petites croix selon le réglage `suppression` ('glisser' | 'croix') ; `BandeauAnnulation` en bas, non bloquant.

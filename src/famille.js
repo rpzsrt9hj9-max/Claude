@@ -39,3 +39,10 @@ export async function etatInscriptions() {
   const d = await r.json();
   return { inscriptionsOuvertes: !d.disable_signup, confirmationEmail: !d.mailer_autoconfirm };
 }
+
+// ---------- Google Sheet du catalogue ----------
+/** Crée (ou remplace) la clé de synchro du Sheet ; elle n'est renvoyée qu'une fois. */
+export const creerCleSheet = () => supabase.rpc('creer_cle_sheet').then(ok);
+export const revoquerCleSheet = () => supabase.rpc('revoquer_cle_sheet').then(ok);
+/** { creee_le, utilisee_le } ou null s'il n'y a pas de clé. */
+export const etatCleSheet = () => supabase.rpc('etat_cle_sheet').then(ok);

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { SheetView } from './SheetView.jsx';
 import { Glissable } from '../components/Glissable.jsx';
 import { useData, useLocalState } from '../data.js';
 import { TYPES, TYPE_ICON } from '../../shared/schema.js';
@@ -9,7 +10,7 @@ import { TacheEditor } from './TacheEditor.jsx';
 import { ArticleCreator } from '../components/ArticleCreator.jsx';
 import { ArticleEditor } from './ArticleEditor.jsx';
 import * as A from '../actions.js';
-import { actualiserProfil, logout, sync } from '../db.js';
+import { DEMO, actualiserProfil, logout, sync } from '../db.js';
 import { changerReglage, useReglages } from '../reglages.js';
 import { NOUVEAUTES } from '../nouveautes.js';
 import { quantiteStock } from '../../shared/achats.js';
@@ -65,6 +66,7 @@ export function PlusView({ theme, setTheme }) {
     ...(admin && !observation ? [['famille', 'Famille et retours', 'users']] : []),
     ...PAGES,
     ...(!admin && !observation ? [['importer', 'Reprendre du catalogue partagé', 'download']] : []),
+    ...(!observation && !DEMO ? [['sheet', 'Google Sheet du catalogue', 'share']] : []),
     ...(!observation ? [['retour', 'Envoyer un retour', 'send']] : []),
     ['nouveautes', `Nouveautés (${VERSION})`, 'calendar'],
   ];
@@ -85,6 +87,7 @@ export function PlusView({ theme, setTheme }) {
         {page === 'famille' && <FamilleView />}
         {page === 'importer' && <ImporterCatalogue />}
         {page === 'retour' && <Retour />}
+        {page === 'sheet' && <SheetView />}
         {page === 'nouveautes' && <Nouveautes />}
       </div>
     );

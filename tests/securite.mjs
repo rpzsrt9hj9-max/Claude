@@ -217,4 +217,44 @@ await comme(B, async () => { await db.query('update retours set lu = false'); })
 assert.equal((await q('select lu from retours'))[0].lu, true);
 ok('seul l’administrateur peut marquer un retour comme lu');
 
+// ---- Google Sheet du catalogue ----
+console.log('Google Sheet');
+await q(`insert into articles (id, nom, type, created_at, updated_at, owner_id) values ('a-perceuse', 'Perceuse admin', 'outillage', 1, 1, $1)`, [A]);
+await comme(B, async () => { await db.query(`insert into articles (id, nom, type, created_at, updated_at) values ('b-vis', 'Vis de Marie', 'consommable', ${now}, ${now})`); });
+await comme(B, async () => { await db.query(`insert into tache_articles (id, tache_id, article_id, quantite, created_at, updated_at) values ('b-t1~b-vis', 'b-t1', 'b-vis', 3, ${now}, ${now})`); });
+await comme(null, refuse('select creer_cle_sheet()'), { role: 'anon' });
+const cleB = (await comme(B, lignes('select creer_cle_sheet() as c')))[0].c;
+assert.match(cleB, /^[0-9a-f]{64}$/);
+assert.ok(!(await q('select cle_hash from cles_sheet')).some((r) => r.cle_hash === cleB));
+ok('la clé est créée par son propriétaire et seule son empreinte est gardée');
+await comme(B, refuse('select * from cles_sheet'));
+await comme(null, refuse('select sheet_proprietaire($1)', [cleB]), { role: 'anon' });
+ok('la table des clés et la fonction interne sont inaccessibles');
+const lu = (await comme(null, lignes('select sheet_lire($1) as j', [cleB]), { role: 'anon' }))[0].j;
+assert.deepEqual(lu.articles.map((a) => a.id), ['b-vis']);
+assert.equal(lu.articles[0].owner_id, undefined);
+assert.deepEqual(lu.usages['b-vis'], { n: 1, titres: ['Corrigée par l’admin'] });
+ok('avec la clé, le Sheet lit seulement le catalogue de Marie (et le nombre de tâches par article)');
+await comme(null, () => assert.rejects(() => db.query('select sheet_lire($1)', ['mauvaise-cle']), /invalide/), { role: 'anon' });
+ok('une mauvaise clé est refusée');
+const ecr = (w) => comme(null, lignes('select sheet_ecrire($1, $2::jsonb) as n', [cleB, JSON.stringify(w)]), { role: 'anon' });
+await ecr([
+  { table: 'lieux', row: { id: 'b-l1', nom: 'Garage', created_at: now, updated_at: now + 1, deleted: false } },
+  { table: 'articles', row: { id: 'b-marteau', nom: 'Marteau', type: 'outillage', lieu_id: 'b-l1', cumul_quantites: false, created_at: now, updated_at: now + 1, deleted: false, owner_id: A } },
+  { table: 'articles', row: { id: 'b-vis', nom: 'Vis 4x40', type: 'consommable', created_at: now, updated_at: now + 2, deleted: false } },
+]);
+const chezB = await q("select id, nom, owner_id, rev from articles where id in ('b-marteau', 'b-vis') order by id");
+assert.deepEqual(chezB.map((r) => [r.id, r.nom, r.owner_id]), [['b-marteau', 'Marteau', B], ['b-vis', 'Vis 4x40', B]]);
+assert.ok(chezB.every((r) => r.rev > 0));
+ok('le Sheet ajoute et modifie des articles chez Marie (propriétaire forcé, révision mise à jour pour la synchro)');
+await comme(null, () => assert.rejects(() => db.query('select sheet_ecrire($1, $2::jsonb)', [cleB, JSON.stringify([{ table: 'articles', row: { id: 'a-perceuse', nom: 'Volée', created_at: 1, updated_at: now + 9, deleted: true } }])]), /autre compte/), { role: 'anon' });
+assert.equal((await q("select nom, deleted from articles where id = 'a-perceuse'"))[0].nom, 'Perceuse admin');
+for (const t of ['taches', 'appartements', 'cles_sheet']) {
+  await comme(null, () => assert.rejects(() => db.query('select sheet_ecrire($1, $2::jsonb)', [cleB, JSON.stringify([{ table: t, row: { id: 'x', created_at: 1, updated_at: 1 } }])]), /non autorisée/), { role: 'anon' });
+}
+ok("impossible de toucher l'article d'un autre compte ou une autre table que le catalogue");
+await comme(B, async () => { await db.query('select revoquer_cle_sheet()'); });
+await comme(null, () => assert.rejects(() => db.query('select sheet_lire($1)', [cleB]), /révoquée/), { role: 'anon' });
+ok('une clé révoquée ne marche plus');
+
 console.log(`\n${nb} vérifications réussies.`);

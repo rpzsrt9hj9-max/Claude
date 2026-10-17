@@ -708,6 +708,122 @@ end $$;
 revoke all on function public.catalogue_partage() from public, anon;
 grant execute on function public.catalogue_partage() to authenticated;
 
+-- ---------- Google Sheet du catalogue : clé de synchronisation ----------
+-- L'appli crée une clé (montrée une seule fois) ; seul son empreinte SHA-256 est gardée. Le script du Sheet
+-- l'envoie à sheet_lire / sheet_ecrire, qui n'ouvrent QUE le catalogue de son propriétaire
+-- (articles, lieux, catégories, items à proposer, stock). Révocable à tout moment depuis l'appli.
+create table if not exists public.cles_sheet (
+  owner_id uuid primary key,
+  cle_hash text not null unique,
+  creee_le timestamptz not null default now(),
+  utilisee_le timestamptz
+);
+alter table public.cles_sheet enable row level security;
+revoke all on public.cles_sheet from anon, authenticated;
+
+create or replace function public.creer_cle_sheet() returns text
+language plpgsql volatile security definer set search_path = public as $$
+declare v_cle text := replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', '');
+begin
+  if auth.uid() is null then
+    raise exception 'Connexion requise';
+  end if;
+  insert into public.cles_sheet (owner_id, cle_hash) values (auth.uid(), encode(sha256(convert_to(v_cle, 'UTF8')), 'hex'))
+    on conflict (owner_id) do update set cle_hash = excluded.cle_hash, creee_le = now(), utilisee_le = null;
+  return v_cle;
+end $$;
+
+create or replace function public.revoquer_cle_sheet() returns void
+language sql volatile security definer set search_path = public as $$
+  delete from public.cles_sheet where owner_id = auth.uid();
+$$;
+
+create or replace function public.etat_cle_sheet() returns jsonb
+language sql stable security definer set search_path = public as $$
+  select jsonb_build_object('creee_le', creee_le, 'utilisee_le', utilisee_le) from public.cles_sheet where owner_id = auth.uid();
+$$;
+
+revoke all on function public.creer_cle_sheet() from public, anon;
+revoke all on function public.revoquer_cle_sheet() from public, anon;
+revoke all on function public.etat_cle_sheet() from public, anon;
+grant execute on function public.creer_cle_sheet() to authenticated;
+grant execute on function public.revoquer_cle_sheet() to authenticated;
+grant execute on function public.etat_cle_sheet() to authenticated;
+
+-- Propriétaire d'une clé (usage interne) ; erreur si la clé est inconnue ou révoquée.
+create or replace function public.sheet_proprietaire(p_cle text) returns uuid
+language plpgsql volatile security definer set search_path = public as $$
+declare v uuid;
+begin
+  select owner_id into v from public.cles_sheet where cle_hash = encode(sha256(convert_to(coalesce(p_cle, ''), 'UTF8')), 'hex');
+  if v is null then
+    raise exception 'Clé de synchronisation invalide ou révoquée';
+  end if;
+  update public.cles_sheet set utilisee_le = now() where owner_id = v;
+  return v;
+end $$;
+revoke all on function public.sheet_proprietaire(text) from public, anon, authenticated;
+
+-- Catalogue du propriétaire de la clé, avec le nombre de tâches qui utilisent chaque article.
+create or replace function public.sheet_lire(p_cle text) returns jsonb
+language plpgsql volatile security definer set search_path = public as $$
+declare v uuid := public.sheet_proprietaire(p_cle);
+begin
+  return jsonb_build_object(
+    'articles', coalesce((select jsonb_agg(to_jsonb(a) - 'owner_id' - 'rev') from public.articles a where a.owner_id = v and not a.deleted), '[]'::jsonb),
+    'lieux', coalesce((select jsonb_agg(to_jsonb(x) - 'owner_id' - 'rev') from public.lieux x where x.owner_id = v and not x.deleted), '[]'::jsonb),
+    'categories', coalesce((select jsonb_agg(to_jsonb(x) - 'owner_id' - 'rev') from public.categories x where x.owner_id = v and not x.deleted), '[]'::jsonb),
+    'article_accessoires', coalesce((select jsonb_agg(to_jsonb(x) - 'owner_id' - 'rev') from public.article_accessoires x where x.owner_id = v and not x.deleted), '[]'::jsonb),
+    'stocks', coalesce((select jsonb_agg(to_jsonb(x) - 'owner_id' - 'rev') from public.stocks x where x.owner_id = v and not x.deleted), '[]'::jsonb),
+    'usages', coalesce((select jsonb_object_agg(u.article_id, jsonb_build_object('n', u.n, 'titres', u.titres)) from (
+        select ta.article_id, count(*) as n, (array_agg(t.titre order by t.titre))[1:3] as titres
+        from public.tache_articles ta join public.taches t on t.id = ta.tache_id
+        where ta.owner_id = v and not ta.deleted and not t.deleted and not coalesce(t.modele, false)
+        group by ta.article_id) u), '{}'::jsonb)
+  );
+end $$;
+
+-- Écritures préparées par le Sheet (lignes complètes) : seulement les tables du catalogue, toujours chez le propriétaire de la clé.
+create or replace function public.sheet_ecrire(p_cle text, p_ecritures jsonb) returns integer
+language plpgsql volatile security definer set search_path = public as $$
+declare
+  v uuid := public.sheet_proprietaire(p_cle);
+  w jsonb; t text; r jsonb; proprio uuid; cols text; maj text; n integer := 0;
+begin
+  if jsonb_typeof(p_ecritures) <> 'array' or jsonb_array_length(p_ecritures) > 5000 then
+    raise exception 'Écritures invalides';
+  end if;
+  for w in select value from jsonb_array_elements(p_ecritures) loop
+    t := w->>'table';
+    if t is null or t not in ('articles', 'lieux', 'categories', 'article_accessoires', 'stocks') then
+      raise exception 'Table non autorisée : %', t;
+    end if;
+    r := (w->'row') - 'owner_id' - 'rev';
+    if coalesce(r->>'id', '') = '' then
+      raise exception 'Identifiant manquant';
+    end if;
+    proprio := null;
+    execute format('select owner_id from public.%I where id = $1', t) into proprio using r->>'id';
+    if proprio is not null and proprio <> v then
+      raise exception 'Ligne d''un autre compte';
+    end if;
+    r := r || jsonb_build_object('owner_id', v);
+    select string_agg(quote_ident(c.column_name), ', '),
+           string_agg(format('%1$I = excluded.%1$I', c.column_name), ', ') filter (where c.column_name <> 'id')
+      into cols, maj
+      from information_schema.columns c
+      where c.table_schema = 'public' and c.table_name = t and r ? c.column_name;
+    execute format('insert into public.%1$I (%2$s) select %2$s from jsonb_populate_record(null::public.%1$I, $1) on conflict (id) do update set %3$s', t, cols, maj) using r;
+    n := n + 1;
+  end loop;
+  return n;
+end $$;
+
+revoke all on function public.sheet_lire(text) from public;
+revoke all on function public.sheet_ecrire(text, jsonb) from public;
+grant execute on function public.sheet_lire(text) to anon, authenticated;
+grant execute on function public.sheet_ecrire(text, jsonb) to anon, authenticated;
+
 -- ---------- Photos : bucket privé Supabase Storage ----------
 -- Chaque compte écrit et lit dans son dossier (nom = identifiant du compte) ; l'administrateur partout.
 insert into storage.buckets (id, name, public) values ('photos', 'photos', false) on conflict (id) do nothing;

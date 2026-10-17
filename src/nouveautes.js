@@ -1,6 +1,18 @@
 // Journal des versions affiché dans l'appli (Plus → Nouveautés) ; même contenu que CHANGELOG.md.
 export const NOUVEAUTES = [
   {
+    version: 'v4.2',
+    date: '2026-10-17',
+    titre: 'Google Sheet du catalogue',
+    points: [
+      'Un Google Sheet relié au catalogue (Plus → Google Sheet du catalogue) : ajout en masse, modification et suppression d’articles dans le Sheet, puis « 🔄 Appli > Synchroniser maintenant ».',
+      'Dans les deux sens : ce qui change dans l’appli revient dans le Sheet. Si un article a été modifié des deux côtés, le Sheet l’emporte.',
+      'Colonnes : nom, type, lieu, catégorie, unité, à acheter, stock, items à proposer (« Batterie 18V ×2; Foret »), notes. Un nouveau lieu ou une nouvelle catégorie tapés dans le Sheet sont créés.',
+      'Garde-fou : supprimer un article déjà utilisé dans une tâche demande confirmation (sinon la ligne est remise). Onglet « Journal » de toutes les synchros.',
+      'Clé de synchro créée dans l’appli, révocable : elle ne donne accès qu’au catalogue.',
+    ],
+  },
+  {
     version: 'v4.1',
     date: '2026-10-17',
     titre: 'Glisser pour supprimer, crayon plus rapide, statut simplifié',

@@ -2,6 +2,14 @@
 
 Même contenu que la page « Nouveautés » de l'appli (Plus → Nouveautés). Les versions précédentes restent en ligne : /Claude/deplacements/vN/.
 
+## v4.2 — Google Sheet du catalogue (17/10/2026)
+
+- Un Google Sheet relié au catalogue (Plus → Google Sheet du catalogue) : ajout en masse, modification et suppression d’articles dans le Sheet, puis « 🔄 Appli > Synchroniser maintenant ».
+- Dans les deux sens : ce qui change dans l’appli revient dans le Sheet. Si un article a été modifié des deux côtés, le Sheet l’emporte.
+- Colonnes : nom, type, lieu, catégorie, unité, à acheter, stock, items à proposer (« Batterie 18V ×2; Foret »), notes. Un nouveau lieu ou une nouvelle catégorie tapés dans le Sheet sont créés.
+- Garde-fou : supprimer un article déjà utilisé dans une tâche demande confirmation (sinon la ligne est remise). Onglet « Journal » de toutes les synchros.
+- Clé de synchro créée dans l’appli, révocable : elle ne donne accès qu’au catalogue.
+
 ## v4.1 — Glisser pour supprimer, crayon plus rapide, statut simplifié (17/10/2026)
 
 - Glisser une ligne vers la gauche : à moitié = retirer (bleu, ex. retirer une tâche de l’intervention), presque jusqu’au bout = supprimer (rouge). Un liseré à droite de la ligne montre ce qui est possible (rouge, bleu, ou les deux).
