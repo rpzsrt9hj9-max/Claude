@@ -1,0 +1,48 @@
+name: Dictee
+options:
+  bundleIdPrefix: com.example
+  deploymentTarget:
+    iOS: "18.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    DEVELOPMENT_TEAM: ""   # <- mets ton Team ID Xcode ici (ou choisis-le dans Xcode > Signing)
+packages:
+  WhisperKit:
+    url: https://github.com/argmaxinc/WhisperKit
+    from: "0.9.0"
+targets:
+  Dictee:
+    type: application
+    platform: iOS
+    sources: [App, Shared]
+    dependencies:
+      - package: WhisperKit
+      - target: DicteeLiveActivity
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: Dictée
+        NSMicrophoneUsageDescription: Dictée enregistre ta voix pour la transcrire sur ton iPhone.
+        NSSupportsLiveActivities: true
+        UIBackgroundModes: [audio]
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.dictee
+        GENERATE_INFOPLIST_FILE: NO
+  DicteeLiveActivity:
+    type: app-extension
+    platform: iOS
+    sources: [Widget, Shared]
+    info:
+      path: Widget/Info.plist
+      properties:
+        CFBundleDisplayName: Dictée
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.dictee.liveactivity
+        GENERATE_INFOPLIST_FILE: NO

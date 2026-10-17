@@ -1,0 +1,14 @@
+name: Dictee build
+on:
+  push:
+    paths: ["Dictee/**"]
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - run: brew install xcodegen
+      - run: cd Dictee && xcodegen
+      - run: |
+          cd Dictee && xcodebuild -project Dictee.xcodeproj -scheme Dictee \
+            -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO build | tail -50
