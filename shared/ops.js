@@ -3,6 +3,7 @@
 // appliquées ensuite par le client ; elles ne touchent jamais directement la base.
 
 import { tacheArticleId, priseId, accessoireId, uuid } from './schema.js';
+import { estChargeur } from './accessoires.js';
 
 /**
  * Fusionne l'article `dropId` dans `keepId` : liaisons de tâches et états « pris » reportés,
@@ -108,11 +109,14 @@ export function copyTache(tache, links, overrides = {}) {
   return { id, writes };
 }
 
-/** Accessoires à proposer quand on ajoute un article à une tâche (hors ceux déjà présents). */
+/**
+ * Items à proposer quand on ajoute un article à une tâche (hors ceux déjà présents).
+ * Les chargeurs ne sont jamais proposés automatiquement (choix de l'utilisateur : on les ajoute à la main).
+ */
 export function accessoiresFor(articleId, data, alreadyLinked = new Set()) {
   const byId = new Map(data.articles.map((a) => [a.id, a]));
   return (data.article_accessoires || [])
-    .filter((x) => x.article_id === articleId && !alreadyLinked.has(x.accessoire_id) && byId.has(x.accessoire_id))
+    .filter((x) => x.article_id === articleId && !alreadyLinked.has(x.accessoire_id) && byId.has(x.accessoire_id) && !estChargeur(byId.get(x.accessoire_id)))
     .map((x) => ({ article: byId.get(x.accessoire_id), quantite: Number(x.quantite) || 1 }))
     .sort((a, b) => a.article.nom.localeCompare(b.article.nom, 'fr'));
 }

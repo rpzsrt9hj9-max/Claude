@@ -209,6 +209,8 @@ create table if not exists public.articles (
   notes text,
   unite text,
   cumul_quantites boolean,
+  a_acheter boolean,
+  achete_le double precision,
   created_at bigint not null,
   updated_at bigint not null,
   deleted boolean not null default false,
@@ -221,6 +223,8 @@ alter table public.articles add column if not exists categorie_id text;
 alter table public.articles add column if not exists notes text;
 alter table public.articles add column if not exists unite text;
 alter table public.articles add column if not exists cumul_quantites boolean;
+alter table public.articles add column if not exists a_acheter boolean;
+alter table public.articles add column if not exists achete_le double precision;
 alter table public.articles add column if not exists owner_id uuid;
 alter table public.articles alter column owner_id set default auth.uid();
 create index if not exists articles_rev on public.articles(rev);
@@ -266,6 +270,7 @@ create table if not exists public.voyages (
   id text primary key,
   nom text,
   date_debut text,
+  ref double precision,
   created_at bigint not null,
   updated_at bigint not null,
   deleted boolean not null default false,
@@ -273,6 +278,7 @@ create table if not exists public.voyages (
 );
 alter table public.voyages add column if not exists nom text;
 alter table public.voyages add column if not exists date_debut text;
+alter table public.voyages add column if not exists ref double precision;
 alter table public.voyages add column if not exists owner_id uuid;
 alter table public.voyages alter column owner_id set default auth.uid();
 create index if not exists voyages_rev on public.voyages(rev);
@@ -294,6 +300,8 @@ create table if not exists public.deplacements (
   statut text,
   voyage_id text,
   appartement_id text,
+  nom_perso text,
+  ref double precision,
   created_at bigint not null,
   updated_at bigint not null,
   deleted boolean not null default false,
@@ -304,6 +312,8 @@ alter table public.deplacements add column if not exists date_debut text;
 alter table public.deplacements add column if not exists statut text;
 alter table public.deplacements add column if not exists voyage_id text;
 alter table public.deplacements add column if not exists appartement_id text;
+alter table public.deplacements add column if not exists nom_perso text;
+alter table public.deplacements add column if not exists ref double precision;
 alter table public.deplacements add column if not exists owner_id uuid;
 alter table public.deplacements alter column owner_id set default auth.uid();
 create index if not exists deplacements_rev on public.deplacements(rev);
@@ -330,6 +340,7 @@ create table if not exists public.taches (
   statut text,
   echeance text,
   modele_id text,
+  ref double precision,
   created_at bigint not null,
   updated_at bigint not null,
   deleted boolean not null default false,
@@ -345,6 +356,7 @@ alter table public.taches add column if not exists modele boolean;
 alter table public.taches add column if not exists statut text;
 alter table public.taches add column if not exists echeance text;
 alter table public.taches add column if not exists modele_id text;
+alter table public.taches add column if not exists ref double precision;
 alter table public.taches add column if not exists owner_id uuid;
 alter table public.taches alter column owner_id set default auth.uid();
 create index if not exists taches_rev on public.taches(rev);
@@ -504,6 +516,33 @@ create policy "photos espace" on public.photos for all to authenticated
 grant select, insert, update on public.photos to authenticated;
 revoke all on public.photos from anon;
 
+create table if not exists public.stocks (
+  id text primary key,
+  article_id text,
+  lieu_id text,
+  quantite double precision,
+  created_at bigint not null,
+  updated_at bigint not null,
+  deleted boolean not null default false,
+  rev bigint
+);
+alter table public.stocks add column if not exists article_id text;
+alter table public.stocks add column if not exists lieu_id text;
+alter table public.stocks add column if not exists quantite double precision;
+alter table public.stocks add column if not exists owner_id uuid;
+alter table public.stocks alter column owner_id set default auth.uid();
+create index if not exists stocks_rev on public.stocks(rev);
+create index if not exists stocks_owner_rev on public.stocks(owner_id, rev);
+drop trigger if exists stocks_lww on public.stocks;
+create trigger stocks_lww before insert or update on public.stocks for each row execute function app_lww();
+alter table public.stocks enable row level security;
+drop policy if exists "stocks connectés" on public.stocks;
+drop policy if exists "stocks espace" on public.stocks;
+create policy "stocks espace" on public.stocks for all to authenticated
+  using (public.espace_visible(owner_id)) with check (public.espace_visible(owner_id));
+grant select, insert, update on public.stocks to authenticated;
+revoke all on public.stocks from anon;
+
 -- ---------- Les données existantes appartiennent à l'administrateur ----------
 do $$
 declare adm uuid;
@@ -523,6 +562,7 @@ begin
     update public.intervention_taches set owner_id = adm where owner_id is null;
     update public.commentaires set owner_id = adm where owner_id is null;
     update public.photos set owner_id = adm where owner_id is null;
+    update public.stocks set owner_id = adm where owner_id is null;
   end if;
 end $$;
 alter table public.lieux alter column owner_id set not null;
@@ -538,6 +578,7 @@ alter table public.prise_articles alter column owner_id set not null;
 alter table public.intervention_taches alter column owner_id set not null;
 alter table public.commentaires alter column owner_id set not null;
 alter table public.photos alter column owner_id set not null;
+alter table public.stocks alter column owner_id set not null;
 
 -- ---------- Migration : déplacements -> interventions ----------
 do $$
@@ -608,6 +649,31 @@ begin
   where d.id in (select distinct intervention_id from _a_scinder)
     and not exists (select 1 from public.intervention_taches l where l.intervention_id = d.id and coalesce(l.deleted, false) = false)
     and not exists (select 1 from public.commentaires c where c.intervention_id = d.id and c.tache_id is null and coalesce(c.deleted, false) = false);
+end $$;
+
+-- ---------- v4 : références (T-0042, I-0017, D-0008) et type « Accessoire » ----------
+do $$
+declare maintenant bigint := (extract(epoch from now()) * 1000)::bigint;
+begin
+  -- Références des éléments existants : par compte, dans l'ordre de création, à la suite des numéros déjà pris
+  update public.taches t set ref = x.n, updated_at = maintenant
+  from (select id, row_number() over (partition by owner_id order by created_at, id)
+               + coalesce((select max(ref) from public.taches m where m.owner_id = s.owner_id), 0) as n
+        from public.taches s where ref is null and coalesce(modele, false) = false and not deleted) x
+  where t.id = x.id;
+  update public.deplacements t set ref = x.n, updated_at = maintenant
+  from (select id, row_number() over (partition by owner_id order by created_at, id)
+               + coalesce((select max(ref) from public.deplacements m where m.owner_id = s.owner_id), 0) as n
+        from public.deplacements s where ref is null and not deleted) x
+  where t.id = x.id;
+  update public.voyages t set ref = x.n, updated_at = maintenant
+  from (select id, row_number() over (partition by owner_id order by created_at, id)
+               + coalesce((select max(ref) from public.voyages m where m.owner_id = s.owner_id), 0) as n
+        from public.voyages s where ref is null and not deleted) x
+  where t.id = x.id;
+  -- Batteries et chargeurs rangés en « Outillage » deviennent des « Accessoires » (reconnus par leur nom)
+  update public.articles set type = 'accessoire', cumul_quantites = false, updated_at = maintenant
+  where type = 'outillage' and not deleted and nom ~* '(^|[^[:alnum:]])(batterie|batteries|chargeur|chargeurs)([^[:alnum:]]|$)';
 end $$;
 
 -- ---------- Catalogue partagé : ce que l'administrateur propose aux nouveaux comptes ----------

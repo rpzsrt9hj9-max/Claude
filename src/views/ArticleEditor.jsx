@@ -2,13 +2,16 @@ import { useMemo, useState } from 'react';
 import { useData } from '../data.js';
 import { findSameName, findSimilar, matchesSearch } from '../../shared/match.js';
 import { defaultCumul, TYPE_ICON } from '../../shared/schema.js';
+import { batteriesCompatibles, estBatterie, estChargeur, tension } from '../../shared/accessoires.js';
+import { quantiteStock } from '../../shared/achats.js';
 import { Button, CategorieSelect, Icon, LieuSelect, Segmented, Sheet, Stepper, TextField, TYPE_OPTIONS } from '../components/ui.jsx';
 import { ArticleCreator } from '../components/ArticleCreator.jsx';
-import { deleteArticle, removeAccessoire, setAccessoire, updateArticle } from '../actions.js';
+import { deleteArticle, duplicateArticle, rangerArticles, removeAccessoire, setAccessoire, setStock, updateArticle } from '../actions.js';
 
 /** Fiche d'un article du catalogue. */
-export function ArticleEditor({ article, onClose }) {
+export function ArticleEditor({ article, onClose, onOpen }) {
   const { data } = useData();
+  const stockInitial = quantiteStock(article.id, data.stocks);
   const [f, setF] = useState({
     nom: article.nom,
     type: article.type,
@@ -17,19 +20,32 @@ export function ArticleEditor({ article, onClose }) {
     unite: article.unite ?? '',
     notes: article.notes ?? '',
     cumul_quantites: !!article.cumul_quantites,
+    a_acheter: !!article.a_acheter,
   });
+  const [stock, setStockSaisi] = useState(stockInitial == null ? '' : String(stockInitial));
+  const [copie, setCopie] = useState(null);
   const set = (k) => (v) => setF((x) => ({ ...x, [k]: v }));
   const clash = f.nom.trim() && findSameName(f.nom, data.articles.filter((a) => a.id !== article.id));
   const usages = data.tache_articles.filter((l) => l.article_id === article.id).length;
 
   const save = async () => {
-    await updateArticle(article.id, { ...f, nom: f.nom.trim(), unite: f.unite.trim() || null, notes: f.notes.trim() || null });
+    // Changement de lieu : la quantité en stock suit (et « acheté » disparaît une fois rangé).
+    if ((f.lieu_id ?? null) !== (article.lieu_id ?? null)) await rangerArticles([article.id], f.lieu_id, data);
+    const { lieu_id: _l, ...reste } = f;
+    await updateArticle(article.id, { ...reste, nom: f.nom.trim(), unite: f.unite.trim() || null, notes: f.notes.trim() || null, ...(f.a_acheter ? { achete_le: null } : {}) });
+    const q = stock.trim() === '' ? null : Number(stock.replace(',', '.'));
+    if ((q ?? null) !== (stockInitial ?? null) && (q == null || Number.isFinite(q))) await setStock({ ...article, lieu_id: f.lieu_id }, q, data);
     onClose();
   };
   const del = async () => {
     if (!confirm(`Supprimer « ${article.nom} » du catalogue${usages ? ` et des ${usages} tâche(s) qui l'utilisent` : ''} ?`)) return;
     await deleteArticle(article, data);
     onClose();
+  };
+  const dupliquer = async () => {
+    const id = await duplicateArticle({ ...article, ...f }, data);
+    setCopie(id);
+    if (onOpen) onOpen(id);
   };
 
   const label = 'mb-1 block text-sm font-medium text-slate-600 dark:text-slate-400';
@@ -49,7 +65,16 @@ export function ArticleEditor({ article, onClose }) {
           <TextField value={f.nom} onChange={set('nom')} />
           {clash && <span className="text-sm text-red-600">« {clash.nom} » existe déjà : utilise plutôt la fusion des doublons.</span>}
         </label>
-        <Segmented options={TYPE_OPTIONS} value={f.type} onChange={(type) => setF((x) => ({ ...x, type, cumul_quantites: defaultCumul(type) }))} />
+        <div className="-mx-4 overflow-x-auto px-4">
+          <Segmented options={TYPE_OPTIONS} value={f.type} onChange={(type) => setF((x) => ({ ...x, type, cumul_quantites: defaultCumul(type) }))} />
+        </div>
+        <label className="flex min-h-11 items-center gap-3 rounded-xl bg-amber-50 p-3 dark:bg-amber-500/10">
+          <input type="checkbox" className="size-6 !min-h-0" checked={f.a_acheter} onChange={(e) => set('a_acheter')(e.target.checked)} />
+          <span>
+            <span className="block font-medium">🛒 À acheter</span>
+            <span className="text-sm text-slate-500">Apparaît dans les achats et la pastille du catalogue</span>
+          </span>
+        </label>
         <div className="grid grid-cols-2 gap-2">
           <label className="block">
             <span className={label}>Lieu de stockage</span>
@@ -60,25 +85,39 @@ export function ArticleEditor({ article, onClose }) {
             <CategorieSelect categories={data.categories} value={f.categorie_id} onChange={set('categorie_id')} className="w-full" />
           </label>
         </div>
-        <label className="block">
-          <span className={label}>Unité (pièce, m, L, cartouche…)</span>
-          <input className="w-full" value={f.unite} onChange={(e) => set('unite')(e.target.value)} />
-        </label>
-        <label className="flex min-h-11 items-center gap-3 rounded-xl bg-white p-3 dark:bg-slate-900">
-          <input type="checkbox" className="size-6 !min-h-0" checked={f.cumul_quantites} onChange={(e) => set('cumul_quantites')(e.target.checked)} />
-          <span>
-            <span className="block font-medium">Additionner les quantités des tâches</span>
-            <span className="text-sm text-slate-500">{f.cumul_quantites ? 'Ex. : 1 vis + 1 vis = 2 vis' : 'Maximum des tâches (un seul outil pour plusieurs tâches)'}</span>
-          </span>
-        </label>
+        <div className="grid grid-cols-2 gap-2">
+          <label className="block">
+            <span className={label}>Quantité en stock</span>
+            <input className="w-full" inputMode="decimal" placeholder="—" value={stock} onChange={(e) => setStockSaisi(e.target.value)} />
+          </label>
+          <label className="block">
+            <span className={label}>Unité (pièce, m, L…)</span>
+            <input className="w-full" value={f.unite} onChange={(e) => set('unite')(e.target.value)} />
+          </label>
+        </div>
+        {!estBatterie({ nom: f.nom }) && (
+          <label className="flex min-h-11 items-center gap-3 rounded-xl bg-white p-3 dark:bg-slate-900">
+            <input type="checkbox" className="size-6 !min-h-0" checked={f.cumul_quantites} onChange={(e) => set('cumul_quantites')(e.target.checked)} />
+            <span>
+              <span className="block font-medium">Additionner les quantités des tâches</span>
+              <span className="text-sm text-slate-500">{f.cumul_quantites ? 'Ex. : 1 vis + 1 vis = 2 vis' : 'Maximum des tâches (un seul pour plusieurs tâches)'}</span>
+            </span>
+          </label>
+        )}
+        {estBatterie({ nom: f.nom }) && <p className="rounded-xl bg-slate-100 p-3 text-sm dark:bg-slate-800">🔋 Batterie : une par outil qui la propose, dans chaque déplacement.</p>}
+        {estChargeur({ nom: f.nom }) && <p className="rounded-xl bg-slate-100 p-3 text-sm dark:bg-slate-800">🔌 Chargeur : jamais proposé automatiquement, à ajouter à la main dans une tâche si besoin.</p>}
 
-        <Accessoires article={article} />
+        <ItemsAProposer article={article} nomActuel={f.nom} typeActuel={f.type} />
 
         <label className="block">
           <span className={label}>Notes</span>
           <TextField multiline value={f.notes} onChange={set('notes')} />
         </label>
         <p className="text-sm text-slate-500">Utilisé dans {usages} tâche(s), tous déplacements et tâches types confondus.</p>
+        <Button icon="plus" className="w-full" onClick={dupliquer}>
+          Dupliquer l'article
+        </Button>
+        {copie && !onOpen && <p className="rounded-xl bg-emerald-100 p-2 text-sm text-emerald-900 dark:bg-emerald-500/20 dark:text-emerald-200">Copie créée : « {f.nom} (copie) », avec ses items à proposer.</p>}
         <Button variant="ghost" icon="trash" className="w-full !text-red-600" onClick={del}>
           Supprimer l'article
         </Button>
@@ -87,8 +126,11 @@ export function ArticleEditor({ article, onClose }) {
   );
 }
 
-/** Accessoires proposés automatiquement quand on ajoute cet article à une tâche. */
-function Accessoires({ article }) {
+/**
+ * Items proposés automatiquement quand on ajoute cet article à une tâche (tout type : peinture -> rouleau, bâche ;
+ * outil -> batterie). La liste reste ouverte pour en ajouter plusieurs d'affilée.
+ */
+function ItemsAProposer({ article, nomActuel, typeActuel }) {
   const { data } = useData();
   const [q, setQ] = useState('');
   const [creating, setCreating] = useState(false);
@@ -96,18 +138,56 @@ function Accessoires({ article }) {
   const byId = useMemo(() => new Map(data.articles.map((a) => [a.id, a])), [data.articles]);
   const have = new Set([article.id, ...links.map((l) => l.accessoire_id)]);
   const results = q.trim()
-    ? [...new Set([...data.articles.filter((a) => matchesSearch(a.nom, q)), ...findSimilar(q, data.articles, 4).map((m) => m.article)])].filter((a) => !have.has(a.id)).slice(0, 6)
+    ? [...new Set([...data.articles.filter((a) => matchesSearch(a.nom, q)), ...findSimilar(q, data.articles, 4).map((m) => m.article)])].filter((a) => a.id !== article.id).slice(0, 8)
     : [];
   const add = async (id) => {
-    await setAccessoire(article.id, id, 1);
-    setQ('');
+    if (!have.has(id)) await setAccessoire(article.id, id, 1);
     setCreating(false);
   };
 
+  // Batteries compatibles (même tension, même marque pré-cochée) pour un outil
+  const compatibles = typeActuel === 'outillage' ? batteriesCompatibles({ id: article.id, nom: nomActuel }, data.articles).filter((c) => !have.has(c.article.id)) : [];
+  const [coches, setCoches] = useState(null);
+  const cochees = coches ?? new Set(compatibles.filter((c) => c.marque).map((c) => c.article.id));
+
   return (
     <section className="space-y-2 rounded-2xl bg-violet-50 p-3 dark:bg-violet-500/10">
-      <h3 className="font-semibold">Accessoires à proposer</h3>
-      <p className="text-sm text-slate-600 dark:text-slate-400">Proposés (pré-cochés) quand tu ajoutes « {article.nom} » à une tâche. Ex. : disques, batterie, forêts.</p>
+      <h3 className="font-semibold">Items à proposer</h3>
+      <p className="text-sm text-slate-600 dark:text-slate-400">
+        Proposés (pré-cochés) quand tu ajoutes « {nomActuel} » à une tâche : batterie, forets, rouleau, bâche… Les chargeurs ne sont jamais proposés automatiquement.
+      </p>
+      {compatibles.length > 0 && (
+        <div className="space-y-1 rounded-xl border-2 border-violet-400 bg-white p-2 dark:bg-slate-900">
+          <p className="text-sm font-semibold">🔋 Batteries compatibles ({tension(nomActuel)} V)</p>
+          {compatibles.map((c) => (
+            <label key={c.article.id} className="flex min-h-10 items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="size-5 !min-h-0"
+                checked={cochees.has(c.article.id)}
+                onChange={() => {
+                  const n = new Set(cochees);
+                  n.has(c.article.id) ? n.delete(c.article.id) : n.add(c.article.id);
+                  setCoches(n);
+                }}
+              />
+              <span className="flex-1">{c.article.nom}</span>
+              {c.marque && <span className="text-xs text-violet-700 dark:text-violet-300">même marque</span>}
+            </label>
+          ))}
+          <Button
+            variant="primary"
+            className="w-full !min-h-10 text-sm"
+            disabled={!cochees.size}
+            onClick={async () => {
+              for (const id of cochees) await setAccessoire(article.id, id, 1);
+              setCoches(new Set());
+            }}
+          >
+            Ajouter ({cochees.size})
+          </Button>
+        </div>
+      )}
       {links.length > 0 && (
         <ul className="divide-y divide-violet-200 rounded-xl bg-white dark:divide-slate-800 dark:bg-slate-900">
           {links.map((l) => {
@@ -125,16 +205,24 @@ function Accessoires({ article }) {
           })}
         </ul>
       )}
-      <TextField value={q} onChange={(v) => { setQ(v); setCreating(false); }} placeholder="🔍 Ajouter un accessoire" autoComplete="off" />
+      <TextField value={q} onChange={(v) => { setQ(v); setCreating(false); }} placeholder="🔍 Ajouter un item (tous types)" autoComplete="off" />
       {q.trim() && !creating && (
         <ul className="space-y-1">
-          {results.map((a) => (
-            <li key={a.id}>
-              <button type="button" onClick={() => add(a.id)} className="flex min-h-11 w-full items-center gap-2 rounded-xl bg-white px-3 text-left dark:bg-slate-900">
-                <Icon name="plus" className="size-5 text-violet-600" /> {TYPE_ICON[a.type]} {a.nom}
-              </button>
-            </li>
-          ))}
+          {results.map((a) => {
+            const deja = have.has(a.id);
+            return (
+              <li key={a.id}>
+                <button
+                  type="button"
+                  disabled={deja}
+                  onClick={() => add(a.id)}
+                  className={`flex min-h-11 w-full items-center gap-2 rounded-xl px-3 text-left ${deja ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300' : 'bg-white dark:bg-slate-900'}`}
+                >
+                  <Icon name={deja ? 'check' : 'plus'} className="size-5 text-violet-600" /> {TYPE_ICON[a.type]} {a.nom}
+                </button>
+              </li>
+            );
+          })}
           {!findSameName(q, data.articles) && (
             <li>
               <button type="button" onClick={() => setCreating(true)} className="flex min-h-11 w-full items-center gap-2 rounded-xl border-2 border-dashed border-violet-500 px-3 text-left font-medium text-violet-700 dark:text-violet-300">
@@ -142,10 +230,15 @@ function Accessoires({ article }) {
               </button>
             </li>
           )}
+          <li>
+            <button type="button" className="min-h-10 text-sm font-medium text-slate-500" onClick={() => setQ('')}>
+              Fermer la liste
+            </button>
+          </li>
         </ul>
       )}
       {creating && (
-        <ArticleCreator nom={q} articles={data.articles} lieux={data.lieux} categories={data.categories} defaultType="consommable" onUseExisting={add} onCreated={add} onCancel={() => setCreating(false)} />
+        <ArticleCreator nom={q} articles={data.articles} lieux={data.lieux} categories={data.categories} defaultType="accessoire" onUseExisting={add} onCreated={add} onCancel={() => setCreating(false)} />
       )}
     </section>
   );

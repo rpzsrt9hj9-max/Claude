@@ -1,14 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useData } from '../data.js';
+import { useData, useLocalState } from '../data.js';
 import { TYPES, TYPE_ICON } from '../../shared/schema.js';
-import { findSameName, matchesSearch, similarity, STRONG } from '../../shared/match.js';
+import { findSameName, matchesSearch, nameKey, similarity, STRONG } from '../../shared/match.js';
 import { Button, Empty, Icon, Segmented, TextField, TYPE_OPTIONS } from '../components/ui.jsx';
 import { BulkBar } from '../components/BulkBar.jsx';
 import { TacheEditor } from './TacheEditor.jsx';
 import { ArticleCreator } from '../components/ArticleCreator.jsx';
 import { ArticleEditor } from './ArticleEditor.jsx';
 import * as A from '../actions.js';
-import { actualiserProfil, logout } from '../db.js';
+import { actualiserProfil, logout, sync } from '../db.js';
+import { changerReglage, useReglages } from '../reglages.js';
+import { NOUVEAUTES } from '../nouveautes.js';
+import { quantiteStock } from '../../shared/achats.js';
+import { CategorieSelect, LieuSelect, Puces, Sheet } from '../components/ui.jsx';
 import { observation } from '../supabase.js';
 import { VERSION } from '../version.js';
 import { FamilleView } from './FamilleView.jsx';
@@ -25,9 +29,31 @@ const PAGES = [
   ['export', 'Exporter / sauvegarder', 'download'],
 ];
 
+const ETAT_SYNC = {
+  ok: 'à jour',
+  syncing: 'synchronisation…',
+  offline: 'hors ligne : les modifications partiront au retour du réseau',
+  error: 'erreur',
+  idle: 'en attente',
+};
+
+/** Interrupteur simple (réglages). */
+function Interrupteur({ titre, detail, valeur, onChange }) {
+  return (
+    <label className="flex min-h-12 cursor-pointer items-center gap-3 py-1">
+      <span className="min-w-0 flex-1">
+        <span className="block font-medium">{titre}</span>
+        {detail && <span className="block text-xs text-slate-500">{detail}</span>}
+      </span>
+      <input type="checkbox" role="switch" className="size-6 shrink-0 !min-h-0" checked={valeur} onChange={(e) => onChange(e.target.checked)} />
+    </label>
+  );
+}
+
 export function PlusView({ theme, setTheme }) {
   const [page, setPage] = useState(null);
-  const { user } = useData();
+  const { user, sync: etat } = useData();
+  const reglages = useReglages();
   const admin = !!user?.admin;
   const [nonLus, setNonLus] = useState(0);
   useEffect(() => {
@@ -39,6 +65,7 @@ export function PlusView({ theme, setTheme }) {
     ...PAGES,
     ...(!admin && !observation ? [['importer', 'Reprendre du catalogue partagé', 'download']] : []),
     ...(!observation ? [['retour', 'Envoyer un retour', 'send']] : []),
+    ['nouveautes', `Nouveautés (${VERSION})`, 'calendar'],
   ];
   if (page) {
     const title = pages.find((p) => p[0] === page)?.[1] ?? '';
@@ -57,16 +84,31 @@ export function PlusView({ theme, setTheme }) {
         {page === 'famille' && <FamilleView />}
         {page === 'importer' && <ImporterCatalogue />}
         {page === 'retour' && <Retour />}
+        {page === 'nouveautes' && <Nouveautes />}
       </div>
     );
   }
+  const probleme = etat && (etat.status === 'error' || etat.status === 'offline' || etat.pending > 0);
   return (
     <div className="space-y-4">
+      <div className={`flex items-center gap-3 rounded-2xl p-3 text-sm shadow-sm ${etat?.status === 'error' ? 'bg-red-50 dark:bg-red-500/10' : probleme ? 'bg-amber-50 dark:bg-amber-500/10' : 'bg-white dark:bg-slate-900'}`}>
+        <span className={`size-3 shrink-0 rounded-full ${etat?.status === 'error' ? 'bg-red-600' : probleme ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+        <span className="min-w-0 flex-1">
+          <span className="block font-medium">
+            Synchronisation : {ETAT_SYNC[etat?.status] ?? '…'}
+            {etat?.pending > 0 && ` · ${etat.pending} modification(s) en attente`}
+          </span>
+          {etat?.status === 'error' && etat.message && <span className="block text-red-700 dark:text-red-300">{etat.message}</span>}
+          {etat?.lastSync && <span className="block text-xs text-slate-500">Dernière synchro : {new Date(etat.lastSync).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</span>}
+        </span>
+        <Button variant="ghost" icon="download" className="!px-2" aria-label="Synchroniser maintenant" onClick={() => sync()} />
+      </div>
+
       <ul className="overflow-hidden rounded-2xl bg-white shadow-sm dark:bg-slate-900">
         {pages.map(([id, label, icon]) => (
           <li key={id} className="border-b border-slate-100 last:border-0 dark:border-slate-800">
-            <button type="button" onClick={() => setPage(id)} className="flex min-h-14 w-full items-center gap-3 px-4 text-left text-lg active:bg-slate-100 dark:active:bg-slate-800">
-              <Icon name={icon} className="size-6 text-sky-600" />
+            <button type="button" onClick={() => setPage(id)} className="flex min-h-12 w-full items-center gap-3 px-4 text-left active:bg-slate-100 dark:active:bg-slate-800">
+              <Icon name={icon} className="size-5 text-sky-600" />
               <span className="flex-1">{label}</span>
               {id === 'famille' && nonLus > 0 && <span className="rounded-full bg-amber-500 px-2 py-0.5 text-xs font-bold text-white">{nonLus}</span>}
               <Icon name="chevron" className="size-5 text-slate-400" />
@@ -74,10 +116,32 @@ export function PlusView({ theme, setTheme }) {
           </li>
         ))}
       </ul>
-      <div className="flex items-center justify-between rounded-2xl bg-white p-3 shadow-sm dark:bg-slate-900">
-        <span className="font-medium">Thème</span>
-        <Segmented options={[['light', '☀️ Clair'], ['dark', '🌙 Sombre']]} value={theme} onChange={setTheme} />
-      </div>
+
+      <section className="space-y-2 rounded-2xl bg-white p-3 shadow-sm dark:bg-slate-900">
+        <h2 className="font-semibold">Affichage (cet appareil)</h2>
+        <div className="flex items-center justify-between gap-2">
+          <span>Densité</span>
+          <Segmented options={[['standard', 'Standard'], ['dense', 'Dense']]} value={reglages.dense ? 'dense' : 'standard'} onChange={(v) => changerReglage('dense', v === 'dense')} />
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <span>Thème</span>
+          <Segmented options={[['light', '☀️ Clair'], ['dark', '🌙 Sombre']]} value={theme} onChange={setTheme} />
+        </div>
+        <Interrupteur titre="Ajout rapide des tâches" detail="Champ de saisie en haut de la liste des tâches" valeur={reglages.ajoutRapide} onChange={(v) => changerReglage('ajoutRapide', v)} />
+      </section>
+
+      <section className="space-y-1 rounded-2xl bg-white p-3 shadow-sm dark:bg-slate-900">
+        <h2 className="font-semibold">Options développeur</h2>
+        <p className="text-xs text-slate-500">Pour essayer d'autres façons de faire ; réglage propre à cet appareil.</p>
+        <Interrupteur
+          titre="Bloquer « pris » si à acheter"
+          detail="Dans Charger, un article encore à acheter ne peut être coché qu'une fois acheté"
+          valeur={reglages.bloquerPrisSiAAcheter}
+          onChange={(v) => changerReglage('bloquerPrisSiAAcheter', v)}
+        />
+        <Interrupteur titre="Filtres du catalogue toujours visibles" detail="Sinon, ils sont derrière le bouton « Filtres »" valeur={reglages.filtresVisibles} onChange={(v) => changerReglage('filtresVisibles', v)} />
+      </section>
+
       <div className="space-y-2 rounded-2xl bg-white p-3 text-sm shadow-sm dark:bg-slate-900">
         <p className="text-slate-500">
           Connecté : <b className="text-slate-700 dark:text-slate-200">{user?.nom || user?.email}</b>
@@ -109,6 +173,27 @@ export function PlusView({ theme, setTheme }) {
         )}
         <p className="text-center text-xs text-slate-400">Version {VERSION}</p>
       </div>
+    </div>
+  );
+}
+
+/** Journal des versions. */
+function Nouveautes() {
+  return (
+    <div className="space-y-4">
+      {NOUVEAUTES.map((n) => (
+        <section key={n.version} className="space-y-2 rounded-2xl bg-white p-4 shadow-sm dark:bg-slate-900">
+          <h2 className="text-lg font-bold">
+            {n.version} · {n.titre}
+          </h2>
+          <p className="text-xs text-slate-500">{new Date(`${n.date}T00:00`).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+          <ul className="list-disc space-y-1 pl-5 text-sm">
+            {n.points.map((p) => (
+              <li key={p}>{p}</li>
+            ))}
+          </ul>
+        </section>
+      ))}
     </div>
   );
 }
@@ -211,31 +296,89 @@ function Retour() {
   );
 }
 
-/** Catalogue (inventaire) : tout ce que l'on possède, sans case « Pris ». */
+const FILTRES_VIDES = { types: [], achat: '', lieu: '', categorie: '', classement: 'categorie' };
+const CLASSEMENTS_CATALOGUE = [['categorie', 'Catégorie'], ['lieu', 'Lieu'], ['type', 'Type'], ['nom', 'Nom']];
+
+/** Catalogue (inventaire) : tout ce que l'on possède, ce qu'il faut acheter, où c'est rangé. */
 export function Catalogue() {
   const { data } = useData();
+  const reglages = useReglages();
+  const dense = reglages.dense;
   const [q, setQ] = useState('');
-  const [type, setType] = useState('tous');
+  const [filtres, setFiltres] = useLocalState('catalogue-filtres', FILTRES_VIDES);
+  const f = { ...FILTRES_VIDES, ...filtres };
+  const [panneau, setPanneau] = useState(false);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState(null);
   const [selection, setSelection] = useState(null);
   const lieux = new Map(data.lieux.map((l) => [l.id, l.nom]));
   const cats = new Map(data.categories.map((c) => [c.id, c.nom]));
-  const list = data.articles.filter((a) => (type === 'tous' || a.type === type) && matchesSearch(`${a.nom} ${cats.get(a.categorie_id) ?? ''} ${lieux.get(a.lieu_id) ?? ''}`, q));
+  const vehicule = data.lieux.find((l) => nameKey(l.nom) === nameKey('Véhicule'));
+  const recherche = q.trim();
+
+  // Une recherche porte sur tous les types (pour ne rien manquer) ; les autres filtres restent actifs.
+  const list = data.articles.filter((a) => {
+    if (recherche) return matchesSearch(`${a.nom} ${cats.get(a.categorie_id) ?? ''} ${lieux.get(a.lieu_id) ?? ''}`, recherche);
+    if (f.types.length && !f.types.includes(a.type)) return false;
+    if (f.achat === 'a_acheter' && !a.a_acheter) return false;
+    if (f.achat === 'vehicule' && !(vehicule && a.lieu_id === vehicule.id)) return false;
+    if (f.lieu === '-' ? a.lieu_id : f.lieu && a.lieu_id !== f.lieu) return false;
+    if (f.categorie === '-' ? a.categorie_id : f.categorie && a.categorie_id !== f.categorie) return false;
+    return true;
+  });
+  const cleGroupe = {
+    categorie: (a) => cats.get(a.categorie_id) ?? 'Sans catégorie',
+    lieu: (a) => lieux.get(a.lieu_id) ?? 'Lieu non renseigné',
+    type: (a) => `${TYPE_ICON[a.type] ?? ''} ${TYPES[a.type] ?? a.type}`,
+    nom: () => '',
+  }[f.classement] ?? (() => '');
+  const groupes = [...list.reduce((m, a) => m.set(cleGroupe(a), [...(m.get(cleGroupe(a)) ?? []), a]), new Map())]
+    .sort(([x], [y]) => (/^(Sans|Lieu non)/.test(x) ? 1 : /^(Sans|Lieu non)/.test(y) ? -1 : x.localeCompare(y, 'fr')));
+  const nbFiltres = f.types.length + (f.achat ? 1 : 0) + (f.lieu ? 1 : 0) + (f.categorie ? 1 : 0);
   const toggleSel = (id) => setSelection((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
-  const exact = q.trim() && findSameName(q, data.articles);
+  const exact = recherche && findSameName(q, data.articles);
+  const puces = [
+    ...f.types.map((t) => [`type-${t}`, `${TYPE_ICON[t]} ${TYPES[t]}`, () => setFiltres({ ...f, types: f.types.filter((x) => x !== t) })]),
+    ...(f.achat ? [['achat', f.achat === 'a_acheter' ? '🛒 À acheter' : '🚐 Dans le véhicule', () => setFiltres({ ...f, achat: '' })]] : []),
+    ...(f.lieu ? [['lieu', `📍 ${f.lieu === '-' ? 'Sans lieu' : lieux.get(f.lieu)}`, () => setFiltres({ ...f, lieu: '' })]] : []),
+    ...(f.categorie ? [['cat', `🗂️ ${f.categorie === '-' ? 'Sans catégorie' : cats.get(f.categorie)}`, () => setFiltres({ ...f, categorie: '' })]] : []),
+  ];
+
   return (
     <div className="space-y-3">
-      <TextField value={q} onChange={(v) => { setQ(v); setCreating(false); }} placeholder="🔍 Rechercher ou ajouter un article" />
-      <div className="-mx-4 overflow-x-auto px-4">
-        <Segmented options={[['tous', 'Tous'], ...TYPE_OPTIONS]} value={type} onChange={setType} />
+      <div className="flex items-start gap-2">
+        <TextField className="min-w-0 flex-1" value={q} onChange={(v) => { setQ(v); setCreating(false); }} placeholder="🔍 Rechercher ou ajouter" />
+        <Button
+          variant={selection ? 'primary' : 'secondary'}
+          icon="check"
+          className="!px-3"
+          aria-label={selection ? 'Terminer la sélection' : 'Sélectionner plusieurs articles'}
+          aria-pressed={!!selection}
+          onClick={() => setSelection(selection ? null : new Set())}
+        />
+        {!reglages.filtresVisibles && (
+          <Button variant={nbFiltres ? 'primary' : 'secondary'} className="!px-3" aria-label="Filtres" onClick={() => setPanneau(true)}>
+            ⚙︎{nbFiltres ? ` ${nbFiltres}` : ''}
+          </Button>
+        )}
       </div>
-      <Button className="w-full" variant={selection ? 'primary' : 'secondary'} onClick={() => setSelection(selection ? null : new Set())}>
-        {selection ? 'Terminer la sélection' : '☑️ Sélectionner plusieurs articles (lieu, catégorie)'}
-      </Button>
-      {q.trim() && !exact && !creating && (
+      {reglages.filtresVisibles && <PanneauFiltres f={f} setFiltres={setFiltres} dense={dense} />}
+      {recherche ? (
+        <p className="text-xs text-slate-500">Recherche dans tous les types.</p>
+      ) : (
+        !reglages.filtresVisibles && puces.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {puces.map(([k, label, retirer]) => (
+              <button key={k} type="button" onClick={retirer} className="min-h-8 rounded-full bg-sky-100 px-3 text-xs font-medium text-sky-800 dark:bg-sky-500/20 dark:text-sky-200">
+                {label} ✕
+              </button>
+            ))}
+          </div>
+        )
+      )}
+      {recherche && !exact && !creating && (
         <Button variant="primary" icon="plus" className="w-full" onClick={() => setCreating(true)}>
-          Créer « {q.trim()} »
+          Créer « {recherche} »
         </Button>
       )}
       {creating && (
@@ -244,40 +387,125 @@ export function Catalogue() {
           articles={data.articles}
           lieux={data.lieux}
           categories={data.categories}
-          defaultType={type === 'tous' ? 'materiel' : type}
+          defaultType={f.types.length === 1 ? f.types[0] : 'materiel'}
           onUseExisting={(id) => { setCreating(false); setQ(''); setEditing(data.articles.find((a) => a.id === id)); }}
           onCreated={() => { setCreating(false); setQ(''); }}
           onCancel={() => setCreating(false)}
         />
       )}
-      <ul className="divide-y divide-slate-100 rounded-2xl bg-white shadow-sm dark:divide-slate-800 dark:bg-slate-900">
-        {list.map((a) => (
-          <li key={a.id}>
-            <button
-              type="button"
-              onClick={() => (selection ? toggleSel(a.id) : setEditing(a))}
-              className={`flex min-h-12 w-full items-center gap-2 px-3 py-1 text-left ${selection?.has(a.id) ? 'bg-sky-100 dark:bg-sky-500/20' : ''}`}
-            >
+      {groupes.map(([titre, articles]) => (
+        <section key={titre || 'tous'}>
+          {titre && (
+            <h2 className="mb-1 flex items-center gap-2 text-sm font-bold text-slate-500">
+              {titre} <span className="font-normal">({articles.length})</span>
               {selection && (
-                <span className={`flex size-7 shrink-0 items-center justify-center rounded-lg border-2 ${selection.has(a.id) ? 'border-sky-600 bg-sky-600 text-white' : 'border-slate-300 dark:border-slate-600'}`}>
-                  {selection.has(a.id) && <Icon name="check" strokeWidth={3} />}
-                </span>
+                <button type="button" className="ml-auto min-h-8 text-xs font-medium text-sky-700 dark:text-sky-400" onClick={() => setSelection((s) => new Set([...s, ...articles.map((a) => a.id)]))}>
+                  Tout choisir
+                </button>
               )}
-              <span>{TYPE_ICON[a.type]}</span>
-              <span className="min-w-0 flex-1">
-                <span className="block font-medium">{a.nom}</span>
-                <span className="text-xs text-slate-500">
-                  📍 {lieux.get(a.lieu_id) ?? '—'} · 🗂️ {cats.get(a.categorie_id) ?? '—'}
-                </span>
-              </span>
-            </button>
-          </li>
-        ))}
-      </ul>
+            </h2>
+          )}
+          <ul className="divide-y divide-slate-100 overflow-hidden rounded-2xl bg-white shadow-sm dark:divide-slate-800 dark:bg-slate-900">
+            {articles.map((a) => {
+              const qte = quantiteStock(a.id, data.stocks);
+              const choisi = selection?.has(a.id);
+              return (
+                <li key={a.id}>
+                  <button
+                    type="button"
+                    onClick={() => (selection ? toggleSel(a.id) : setEditing(a))}
+                    className={`flex w-full items-center gap-2 px-3 text-left ${dense ? 'min-h-11 py-0.5' : 'min-h-12 py-1'} ${choisi ? 'bg-sky-100 dark:bg-sky-500/20' : ''}`}
+                  >
+                    {selection && (
+                      <span className={`flex size-6 shrink-0 items-center justify-center rounded-md border-2 ${choisi ? 'border-sky-600 bg-sky-600 text-white' : 'border-slate-300 dark:border-slate-600'}`}>
+                        {choisi && <Icon name="check" className="size-4" strokeWidth={3} />}
+                      </span>
+                    )}
+                    <span className="shrink-0">{TYPE_ICON[a.type]}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className={`block font-medium ${dense ? 'truncate' : ''}`}>
+                        {a.nom}
+                        {a.a_acheter && <span className="ml-1" title="À acheter">🛒</span>}
+                      </span>
+                      {!dense && (
+                        <span className="block text-xs text-slate-500">
+                          📍 {lieux.get(a.lieu_id) ?? '—'} · 🗂️ {cats.get(a.categorie_id) ?? '—'}
+                        </span>
+                      )}
+                    </span>
+                    {dense && a.lieu_id && <span className="max-w-[35%] shrink-0 truncate text-xs text-slate-500">{lieux.get(a.lieu_id)}</span>}
+                    {qte != null && <span className="shrink-0 rounded-full bg-slate-100 px-2 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-300">× {qte}</span>}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ))}
       {list.length === 0 && <Empty>Aucun article.</Empty>}
-      {selection && <div className="h-44" aria-hidden="true" />}
+      {selection && <div className="h-48" aria-hidden="true" />}
       {selection && <BulkBar selection={selection} onDone={() => setSelection(null)} onAll={() => setSelection(new Set(list.map((a) => a.id)))} />}
-      {editing && <ArticleEditor article={editing} onClose={() => setEditing(null)} />}
+      {editing && <ArticleEditor article={data.articles.find((a) => a.id === editing.id) ?? editing} onClose={() => setEditing(null)} />}
+      {panneau && (
+        <Sheet
+          title="Filtres et classement"
+          onClose={() => setPanneau(false)}
+          footer={
+            <div className="grid grid-cols-2 gap-2">
+              <Button onClick={() => setFiltres({ ...FILTRES_VIDES, classement: f.classement })}>Tout effacer</Button>
+              <Button variant="primary" onClick={() => setPanneau(false)}>
+                Voir {list.length} article{list.length > 1 ? 's' : ''}
+              </Button>
+            </div>
+          }
+        >
+          <PanneauFiltres f={f} setFiltres={setFiltres} />
+        </Sheet>
+      )}
+    </div>
+  );
+}
+
+/** Filtres du catalogue : type, achats, lieu, catégorie, classement. */
+function PanneauFiltres({ f, setFiltres, dense }) {
+  const { data } = useData();
+  const titre = 'mb-1 text-xs font-bold tracking-wide text-slate-500 uppercase';
+  return (
+    <div className="space-y-3">
+      <div>
+        <p className={titre}>Type</p>
+        <Puces dense={dense} multiple options={TYPE_OPTIONS} value={f.types} onChange={(types) => setFiltres({ ...f, types })} />
+      </div>
+      <div>
+        <p className={titre}>Achats</p>
+        <Puces dense={dense} options={[['', 'Tous'], ['a_acheter', '🛒 À acheter'], ['vehicule', '🚐 Achetés, dans le véhicule']]} value={f.achat} onChange={(achat) => setFiltres({ ...f, achat })} />
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <label className="block text-xs font-bold text-slate-500 uppercase">
+          Lieu
+          <select className="mt-1 w-full text-sm font-normal normal-case" value={f.lieu} onChange={(e) => setFiltres({ ...f, lieu: e.target.value })}>
+            <option value="">Tous</option>
+            <option value="-">Sans lieu</option>
+            {data.lieux.map((l) => (
+              <option key={l.id} value={l.id}>{l.nom}</option>
+            ))}
+          </select>
+        </label>
+        <label className="block text-xs font-bold text-slate-500 uppercase">
+          Catégorie
+          <select className="mt-1 w-full text-sm font-normal normal-case" value={f.categorie} onChange={(e) => setFiltres({ ...f, categorie: e.target.value })}>
+            <option value="">Toutes</option>
+            <option value="-">Sans catégorie</option>
+            {data.categories.map((c) => (
+              <option key={c.id} value={c.id}>{c.nom}</option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <div>
+        <p className={titre}>Classer par</p>
+        <Puces dense={dense} options={CLASSEMENTS_CATALOGUE} value={f.classement} onChange={(classement) => setFiltres({ ...f, classement })} />
+      </div>
     </div>
   );
 }

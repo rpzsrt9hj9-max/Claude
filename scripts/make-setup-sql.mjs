@@ -256,6 +256,31 @@ begin
     and not exists (select 1 from public.commentaires c where c.intervention_id = d.id and c.tache_id is null and coalesce(c.deleted, false) = false);
 end $$;
 
+-- ---------- v4 : références (T-0042, I-0017, D-0008) et type « Accessoire » ----------
+do $$
+declare maintenant bigint := (extract(epoch from now()) * 1000)::bigint;
+begin
+  -- Références des éléments existants : par compte, dans l'ordre de création, à la suite des numéros déjà pris
+  update public.taches t set ref = x.n, updated_at = maintenant
+  from (select id, row_number() over (partition by owner_id order by created_at, id)
+               + coalesce((select max(ref) from public.taches m where m.owner_id = s.owner_id), 0) as n
+        from public.taches s where ref is null and coalesce(modele, false) = false and not deleted) x
+  where t.id = x.id;
+  update public.deplacements t set ref = x.n, updated_at = maintenant
+  from (select id, row_number() over (partition by owner_id order by created_at, id)
+               + coalesce((select max(ref) from public.deplacements m where m.owner_id = s.owner_id), 0) as n
+        from public.deplacements s where ref is null and not deleted) x
+  where t.id = x.id;
+  update public.voyages t set ref = x.n, updated_at = maintenant
+  from (select id, row_number() over (partition by owner_id order by created_at, id)
+               + coalesce((select max(ref) from public.voyages m where m.owner_id = s.owner_id), 0) as n
+        from public.voyages s where ref is null and not deleted) x
+  where t.id = x.id;
+  -- Batteries et chargeurs rangés en « Outillage » deviennent des « Accessoires » (reconnus par leur nom)
+  update public.articles set type = 'accessoire', cumul_quantites = false, updated_at = maintenant
+  where type = 'outillage' and not deleted and nom ~* '(^|[^[:alnum:]])(batterie|batteries|chargeur|chargeurs)([^[:alnum:]]|$)';
+end $$;
+
 -- ---------- Catalogue partagé : ce que l'administrateur propose aux nouveaux comptes ----------
 -- Seuls le nom, le type, la catégorie, l'unité, les accessoires et les tâches types (étapes et matériel)
 -- sont communiqués : jamais les notes, les lieux, les biens, les tâches ni les photos.

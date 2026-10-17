@@ -9,6 +9,8 @@ import { reporterSurTache } from '../shared/modeles.js';
 import { stockerPhoto, compresserPhoto, supprimerFichierPhoto, espaceId } from './db.js';
 import { supabase } from './supabase.js';
 import { categoriesDeDepart, planImport } from '../shared/catalogue.js';
+import { marquerAchete, marquerAAcheter, ranger, fixerStock } from '../shared/achats.js';
+import { corrigerReferences } from '../shared/references.js';
 
 /** Fixe la quantité prise d'un article ; « pris » est vrai quand la quantité totale est atteinte. */
 export function setPrise(deplacementId, item, quantite) {
@@ -79,15 +81,42 @@ export const setFait = (tache, fait) => update('taches', tache.id, { fait, statu
 export const setStatutTache = (tache, statut) => update('taches', tache.id, { statut, fait: statut === 'terminee' });
 export const setDescription = (tache, description) => update('taches', tache.id, { description });
 
-export async function createArticle({ nom, type, lieu_id = null, categorie_id = null, unite = null }, articles) {
+export async function createArticle({ nom, type, lieu_id = null, categorie_id = null, unite = null, a_acheter = false }, articles) {
   const clean = nom.trim();
   if (!clean) throw new Error('Nom vide');
   if (findSameName(clean, articles)) throw new Error(`« ${clean} » existe déjà.`);
-  return insert('articles', { nom: clean, type, lieu_id, categorie_id, unite: unite || null, notes: null, cumul_quantites: defaultCumul(type) });
+  return insert('articles', { nom: clean, type, lieu_id, categorie_id, unite: unite || null, notes: null, cumul_quantites: defaultCumul(type), a_acheter: !!a_acheter });
 }
 
-/** Modification groupée : même lieu ou même catégorie pour plusieurs articles. */
+/** Modification groupée : même catégorie ou même type pour plusieurs articles. */
 export const bulkUpdateArticles = (ids, patch) => write([...ids].map((id) => ({ table: 'articles', row: { id, ...patch } })));
+
+// ---------- Achats, rangement et stock ----------
+
+export const acheter = (ids, data) => write(marquerAchete([...ids], data, espaceId()));
+export const aAcheter = (ids, valeur = true) => write(marquerAAcheter([...ids], valeur));
+/** Ranger des articles dans un lieu (leur quantité en stock suit). */
+export const rangerArticles = (ids, lieuId, data) => write(ranger([...ids], lieuId, data));
+export const setStock = (article, quantite, data) => write(fixerStock(article, quantite, data));
+
+/** Duplique un article du catalogue avec ses items à proposer (nom suivi de « (copie) »). */
+export async function duplicateArticle(article, data) {
+  const id = uuid();
+  const { id: _i, created_at: _c, updated_at: _u, rev: _r, _dirty: _d, ...champs } = article;
+  const writes = [{ table: 'articles', row: { ...champs, id, nom: `${article.nom} (copie)`, a_acheter: !!article.a_acheter, achete_le: null, deleted: false } }];
+  for (const l of data.article_accessoires.filter((x) => x.article_id === article.id)) {
+    writes.push({ table: 'article_accessoires', row: { id: accessoireId(id, l.accessoire_id), article_id: id, accessoire_id: l.accessoire_id, quantite: l.quantite, deleted: false } });
+  }
+  await write(writes);
+  return id;
+}
+
+/** Complète ou dédoublonne les références T- / I- / D- (rien à faire la plupart du temps). */
+export async function verifierReferences(data) {
+  const writes = corrigerReferences(data);
+  if (writes.length) await write(writes);
+  return writes.length;
+}
 
 export const setAccessoire = (articleId, accId, quantite = 1) =>
   write({ table: 'article_accessoires', row: { id: accessoireId(articleId, accId), article_id: articleId, accessoire_id: accId, quantite, deleted: false } });

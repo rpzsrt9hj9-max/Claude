@@ -5,19 +5,22 @@ export const TABLES = {
   lieux: ['nom'],
   appartements: ['nom'],
   categories: ['nom'],
-  articles: ['nom', 'type', 'lieu_id', 'categorie_id', 'notes', 'unite', 'cumul_quantites'],
-  // Accessoires proposés avec un article (ex. meuleuse -> disques à meuler, batterie)
+  // a_acheter : à acheter (pastille du catalogue) ; achete_le : date d'achat (ms), tant qu'il n'est pas rangé.
+  articles: ['nom', 'type', 'lieu_id', 'categorie_id', 'notes', 'unite', 'cumul_quantites', 'a_acheter', 'achete_le'],
+  // « Items à proposer » avec un article (ex. ponceuse -> batterie, peinture -> rouleau, bâche)
   article_accessoires: ['article_id', 'accessoire_id', 'quantite'],
   // Déplacement (voyage) : regroupe une intervention par bien ; porte la liste de chargement.
-  voyages: ['nom', 'date_debut'],
+  // ref : numéro de référence (D-0008), croissant par compte.
+  voyages: ['nom', 'date_debut', 'ref'],
   // Interventions (nom historique de la table : « deplacements ») ; date_debut = date d'intervention.
   // voyage_id = déplacement parent ; appartement_id = bien de l'intervention.
-  deplacements: ['nom', 'date_debut', 'statut', 'voyage_id', 'appartement_id'],
+  // nom_perso : nom facultatif choisi par l'utilisateur (« Bien A · rotation locataire ») ; ref : I-0017.
+  deplacements: ['nom', 'date_debut', 'statut', 'voyage_id', 'appartement_id', 'nom_perso', 'ref'],
   // Liste générale des tâches. Une tâche type (modèle) a modele = true.
   // statut : a_traiter | reportee | terminee ; echeance : AAAA-MM-JJ.
   // deplacement_id et fait : anciens champs, conservés pour les données existantes.
   // modele_id = tâche type d'origine (pour reporter les modifications du modèle).
-  taches: ['deplacement_id', 'titre', 'description', 'appartement_id', 'fait', 'ordre', 'modele', 'statut', 'echeance', 'modele_id'],
+  taches: ['deplacement_id', 'titre', 'description', 'appartement_id', 'fait', 'ordre', 'modele', 'statut', 'echeance', 'modele_id', 'ref'],
   tache_articles: ['tache_id', 'article_id', 'quantite'],
   prise_articles: ['deplacement_id', 'article_id', 'pris', 'quantite_prise'],
   // Tâches d'une intervention (gardé après clôture : historique). resultat = statut donné à la clôture.
@@ -28,13 +31,16 @@ export const TABLES = {
   commentaires: ['tache_id', 'intervention_id', 'texte', 'auteur', 'dans_rapport'],
   // Photos jointes à un commentaire ; le fichier est dans le bucket Supabase Storage « photos ».
   photos: ['commentaire_id', 'chemin', 'legende', 'dans_rapport'],
+  // Stock : quantité d'un article dans un lieu (une ligne par article et par lieu ; id = article~lieu).
+  // L'écran ne gère pour l'instant qu'une quantité, au lieu principal de l'article.
+  stocks: ['article_id', 'lieu_id', 'quantite'],
 };
 
 export const TABLE_NAMES = Object.keys(TABLES);
 
 // Champs booléens et numériques (pour la génération du schéma SQL)
-export const BOOL_FIELDS = new Set(['cumul_quantites', 'fait', 'pris', 'deleted', 'modele', 'dans_rapport']);
-export const REAL_FIELDS = new Set(['quantite', 'quantite_prise', 'ordre']);
+export const BOOL_FIELDS = new Set(['cumul_quantites', 'fait', 'pris', 'deleted', 'modele', 'dans_rapport', 'a_acheter']);
+export const REAL_FIELDS = new Set(['quantite', 'quantite_prise', 'ordre', 'ref', 'achete_le']);
 
 export const STATUTS = {
   en_preparation: 'En préparation',
@@ -42,11 +48,12 @@ export const STATUTS = {
   termine: 'Terminée',
 };
 
-export const TYPES = { outillage: 'Outillage', consommable: 'Consommables', materiel: 'Matériel' };
-export const TYPE_ICON = { outillage: '🔧', consommable: '⚙️', materiel: '📦' };
-export const TYPE_ORDER = ['outillage', 'consommable', 'materiel'];
-// L'outillage ne se cumule pas (une perceuse pour trois tâches) ; matériel et consommables s'additionnent.
-export const defaultCumul = (type) => type !== 'outillage';
+export const TYPES = { outillage: 'Outillage', accessoire: 'Accessoires', consommable: 'Consommables', materiel: 'Matériel' };
+export const TYPE_ICON = { outillage: '🔧', accessoire: '🔋', consommable: '⚙️', materiel: '📦' };
+export const TYPE_ORDER = ['outillage', 'accessoire', 'consommable', 'materiel'];
+// Outillage et accessoires ne se cumulent pas (une perceuse pour trois tâches) ; matériel et consommables s'additionnent.
+// Exception : les batteries, une par outil qui la propose (voir shared/accessoires.js).
+export const defaultCumul = (type) => type !== 'outillage' && type !== 'accessoire';
 
 // Identifiants déterministes pour les tables de liaison : deux appareils hors ligne
 // qui cochent le même article produisent la même ligne (pas de doublon à la synchro).
@@ -55,6 +62,7 @@ export const accessoireId = (articleId, accessoireIdValue) => `${articleId}~${ac
 export const priseId = (deplacementId, articleId) => `${deplacementId}~${articleId}`;
 // Cases « Sorti de la voiture » d'une intervention : même table que « Pris », clé distincte.
 export const cleSortie = (interventionId) => `sortir~${interventionId}`;
+export const stockId = (articleId, lieuId) => `${articleId}~${lieuId ?? 'sans-lieu'}`;
 export const interventionTacheId = (interventionId, tacheId) => `${interventionId}~${tacheId}`;
 
 export function uuid() {

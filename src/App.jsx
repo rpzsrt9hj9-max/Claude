@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import { DataContext, useAllData, useLocalState, useSyncState } from './data.js';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { DEMO, db, login, quitterObservation, signup, sync } from './db.js';
+import { DEMO, db, login, quitterObservation, signup } from './db.js';
 import { observation } from './supabase.js';
 import { Bienvenue } from './views/Bienvenue.jsx';
 import { Button, Icon } from './components/ui.jsx';
 import { BacklogView } from './views/BacklogView.jsx';
 import { DeplacementsView, InterventionsView } from './views/DeplacementsView.jsx';
 import { Catalogue, PlusView } from './views/PlusView.jsx';
-import { SearchView } from './views/SearchView.jsx';
+import { verifierReferences } from './actions.js';
+import { nbAAcheter } from '../shared/achats.js';
 
 const TABS = [
   ['taches', 'Tâches', 'tasks'],
@@ -17,7 +18,14 @@ const TABS = [
   ['catalogue', 'Catalogue', 'box'],
   ['plus', 'Plus', 'more'],
 ];
-const TITRES = { taches: 'Tâches', interventions: 'Interventions', deplacements: 'Déplacements', catalogue: 'Catalogue', plus: 'Plus' };
+const ONGLETS = new Set(TABS.map((t) => t[0]));
+
+/** Souci de synchro à signaler (sinon rien n'est affiché) : orange = en attente / hors ligne, rouge = erreur. */
+export function alerteSync(s) {
+  if (s.status === 'error') return 'rouge';
+  if (s.status === 'offline' || s.pending > 0) return 'orange';
+  return null;
+}
 
 export default function App() {
   const s = useSyncState();
@@ -29,50 +37,51 @@ export default function App() {
 
 function Main({ data, sync: syncInfo }) {
   const [stored, setTab] = useLocalState('onglet', 'taches');
-  const tab = TITRES[stored] ? stored : 'taches';
+  const tab = ONGLETS.has(stored) ? stored : 'taches';
   const [interventionSeule, setInterventionSeule] = useLocalState('intervention-onglet', null);
   const [voyageId, setVoyageId] = useLocalState('voyage-ouvert', null);
   const [interventionId, setInterventionId] = useLocalState('intervention-ouverte', null);
   const [theme, setTheme] = useLocalState('theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light');
-  const [search, setSearch] = useState(false);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
   }, [theme]);
 
-  const ctx = useMemo(() => ({ data, user: syncInfo.user }), [data, syncInfo.user]);
+  const ctx = useMemo(() => ({ data, user: syncInfo.user, sync: syncInfo }), [data, syncInfo]);
 
-  // Premier démarrage d'un nouveau compte : après une première synchro réussie, si l'espace est vide.
+  // Références T- / I- / D- : attribuées aux nouveaux éléments, doublons corrigés (rien à faire la plupart du temps).
+  useEffect(() => {
+    verifierReferences(data).catch(() => {});
+  }, [data]);
+
+  // Premier démarrage d'un nouveau compte : seulement si le serveur a confirmé que l'espace est vide.
   const bienvenue = useLiveQuery(async () => (await db.meta.get('onboarding'))?.value ?? 'non', []);
   const espaceServeur = useLiveQuery(async () => (await db.meta.get('espace'))?.value ?? 'inconnu', []);
   const [bienvenueFaite, setBienvenueFaite] = useState(false);
   const espaceVide = data.categories.length === 0 && data.articles.length === 0 && data.taches.length === 0;
   const afficherBienvenue = !DEMO && !observation && !bienvenueFaite && espaceServeur === 'vide' && bienvenue === 'non' && espaceVide;
 
+  const achats = nbAAcheter(data.articles);
+  const alerte = alerteSync(syncInfo);
+
   return (
     <DataContext.Provider value={ctx}>
       <div className="mx-auto min-h-dvh max-w-2xl print:hidden">
-        <header className="safe-top sticky top-0 z-40 border-b border-slate-200 bg-slate-50/95 backdrop-blur dark:border-slate-800 dark:bg-slate-950/95">
-          {observation && (
-            <div className="flex items-center gap-2 bg-violet-600 px-4 py-2 text-sm text-white">
-              <Icon name="eye" className="size-5 shrink-0" />
-              <span className="min-w-0 flex-1 truncate">
-                Compte de <b>{observation.nom || observation.email}</b>
-              </span>
-              <button type="button" onClick={quitterObservation} className="min-h-9 shrink-0 rounded-lg bg-white/20 px-3 font-semibold active:bg-white/30">
-                Quitter
-              </button>
-            </div>
-          )}
-          <div className="flex items-center gap-2 px-4 py-2">
-            <h1 className="min-w-0 flex-1 truncate text-lg font-bold">{TITRES[tab]}</h1>
-            <SyncBadge s={syncInfo} />
-            <Button variant="ghost" icon="search" aria-label="Rechercher" className="!px-2" onClick={() => setSearch(true)} />
+        {observation ? (
+          <div className="safe-top sticky top-0 z-40 flex items-center gap-2 bg-violet-600 px-4 py-2 text-sm text-white">
+            <Icon name="eye" className="size-5 shrink-0" />
+            <span className="min-w-0 flex-1 truncate">
+              Compte de <b>{observation.nom || observation.email}</b>
+            </span>
+            <button type="button" onClick={quitterObservation} className="min-h-9 shrink-0 rounded-lg bg-white/20 px-3 font-semibold active:bg-white/30">
+              Quitter
+            </button>
           </div>
-          {syncInfo.status === 'error' && syncInfo.message && <p className="bg-red-100 px-4 py-2 text-sm text-red-800 dark:bg-red-500/20 dark:text-red-200">{syncInfo.message}</p>}
-        </header>
+        ) : (
+          <div className="safe-top" />
+        )}
 
-        <main className="px-4 pt-4 pb-28">
+        <main className="px-4 pt-3 pb-24">
           {tab === 'taches' && <BacklogView />}
           {tab === 'interventions' && <InterventionsView interventionId={interventionSeule} setInterventionId={setInterventionSeule} />}
           {tab === 'deplacements' && <DeplacementsView voyageId={voyageId} setVoyageId={setVoyageId} interventionId={interventionId} setInterventionId={setInterventionId} />}
@@ -84,12 +93,13 @@ function Main({ data, sync: syncInfo }) {
           <div className="mx-auto flex max-w-2xl">
             {TABS.map(([id, label, icon]) => {
               const active = tab === id;
+              const pastille = id === 'catalogue' && achats > 0 ? achats : null;
               return (
                 <button
                   key={id}
                   type="button"
                   onClick={() => {
-                    // Toucher « Déplacements » quand on y est déjà remonte d'un niveau.
+                    // Toucher l'onglet où l'on est déjà remonte d'un niveau.
                     if (id === 'interventions' && active) setInterventionSeule(null);
                     if (id === 'deplacements' && active) {
                       if (interventionId) setInterventionId(null);
@@ -98,37 +108,23 @@ function Main({ data, sync: syncInfo }) {
                     setTab(id);
                   }}
                   aria-current={active ? 'page' : undefined}
-                  className={`relative flex min-h-16 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 text-[11px] font-medium ${active ? 'text-sky-600 dark:text-sky-400' : 'text-slate-500'}`}
+                  aria-label={pastille ? `${label} : ${pastille} à acheter` : id === 'plus' && alerte ? `${label} : synchronisation à vérifier` : label}
+                  className={`relative flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center text-[10px] leading-tight font-medium ${active ? 'text-sky-600 dark:text-sky-400' : 'text-slate-500'}`}
                 >
-                  <Icon name={icon} className="size-6" strokeWidth={active ? 2.5 : 2} />
-                  {label}
+                  <span className="relative">
+                    <Icon name={icon} className="size-5" strokeWidth={active ? 2.5 : 2} />
+                    {pastille && <span className="absolute -top-1.5 -right-3 min-w-4 rounded-full bg-red-600 px-1 text-center text-[10px] leading-4 font-bold text-white">{pastille > 99 ? '99+' : pastille}</span>}
+                    {id === 'plus' && alerte && <span className={`absolute -top-0.5 -right-1 size-2.5 rounded-full ring-2 ring-white dark:ring-slate-900 ${alerte === 'rouge' ? 'bg-red-600' : 'bg-amber-500'}`} />}
+                  </span>
+                  <span className="truncate">{label}</span>
                 </button>
               );
             })}
           </div>
         </nav>
       </div>
-      {search && <SearchView onClose={() => setSearch(false)} />}
       {afficherBienvenue && <Bienvenue onTermine={() => setBienvenueFaite(true)} />}
     </DataContext.Provider>
-  );
-}
-
-function SyncBadge({ s }) {
-  const map = {
-    ok: ['bg-emerald-500', s.pending ? `${s.pending} en attente` : 'Synchronisé'],
-    syncing: ['bg-sky-500 animate-pulse', 'Synchro…'],
-    offline: ['bg-amber-500', s.pending ? `Hors ligne · ${s.pending} en attente` : 'Hors ligne'],
-    error: ['bg-red-500', 'Erreur de synchro'],
-    idle: ['bg-slate-400', '…'],
-  };
-  const [color, label] = map[s.status] ?? map.idle;
-  return (
-    <button type="button" onClick={() => sync()} className="flex min-h-11 items-center gap-1.5 rounded-full px-2 text-xs text-slate-500" title={label} aria-label={`État : ${label}. Synchroniser`}>
-      <span className={`size-2.5 rounded-full ${color}`} />
-      <span className="hidden sm:inline">{label}</span>
-      {s.status !== 'ok' && <span className="sm:hidden">{s.status === 'offline' ? 'Hors ligne' : ''}</span>}
-    </button>
   );
 }
 

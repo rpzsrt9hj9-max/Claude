@@ -1,6 +1,7 @@
 // Règles de calcul : quantités à prendre, état « pris », tâches « prêtes ».
 // Rien de tout cela n'est saisi à la main : tout est recalculé à partir des données.
 import { tachesIntervention } from './interventions.js';
+import { estBatterie, quantiteBatterie } from './accessoires.js';
 
 const round = (n) => Math.round(n * 1000) / 1000;
 
@@ -42,10 +43,14 @@ export function computeTrip(deplacementId, data, taches = tachesIntervention(dep
   }
 
   const items = [];
+  const liensTaches = data.tache_articles.filter((l) => tacheById.has(l.tache_id));
   for (const need of needs.values()) {
     const qs = need.usages.map((u) => u.quantite);
     // Matériel : on additionne. Outillage : on prend le maximum (une perceuse pour trois tâches).
-    const total = need.article.cumul_quantites ? qs.reduce((s, q) => s + q, 0) : Math.max(...qs);
+    // Batteries : une par outil (distinct) qui la propose.
+    const total = estBatterie(need.article)
+      ? quantiteBatterie(need.article, need.usages, liensTaches, data.article_accessoires || [])
+      : need.article.cumul_quantites ? qs.reduce((s, q) => s + q, 0) : Math.max(...qs);
     const prise = priseByArticle.get(need.article.id);
     items.push({ ...need, total: round(total), prise, status: priseStatus(total, prise) });
   }
@@ -54,10 +59,10 @@ export function computeTrip(deplacementId, data, taches = tachesIntervention(dep
 
   const tachesInfo = taches.map((tache) => {
     const links = linksByTache.get(tache.id) || [];
-    const byType = { outillage: [], consommable: [], materiel: [] };
+    const byType = { outillage: [], accessoire: [], consommable: [], materiel: [] };
     for (const l of links) {
       const art = articleById.get(l.article_id);
-      byType[art.type]?.push({ link: l, article: art, item: itemByArticle.get(art.id) });
+      (byType[art.type] ?? byType.materiel).push({ link: l, article: art, item: itemByArticle.get(art.id) });
     }
     const ready = (list) => list.every((x) => x.item.status.complet);
     const materielPret = ready(byType.materiel);
@@ -72,7 +77,8 @@ export function computeTrip(deplacementId, data, taches = tachesIntervention(dep
       materielPret,
       outillagePret,
       consommablePret,
-      prete: materielPret && outillagePret && consommablePret,
+      accessoire: byType.accessoire,
+      prete: materielPret && outillagePret && consommablePret && ready(byType.accessoire),
     };
   });
 
@@ -84,7 +90,7 @@ export function computeTrip(deplacementId, data, taches = tachesIntervention(dep
   return {
     taches: tachesInfo,
     items,
-    progress: { materiel: progress('materiel'), outillage: progress('outillage'), consommable: progress('consommable') },
+    progress: { materiel: progress('materiel'), outillage: progress('outillage'), accessoire: progress('accessoire'), consommable: progress('consommable') },
   };
 }
 
@@ -105,8 +111,8 @@ export function groupBy(items, list, field) {
   });
 }
 
-/** Regroupe des éléments par type (outillage, consommables, matériel), puis par lieu dans chaque type. */
-export function groupByType(items, lieux, ordre = ['outillage', 'consommable', 'materiel']) {
+/** Regroupe des éléments par type (outillage, accessoires, consommables, matériel), puis par lieu dans chaque type. */
+export function groupByType(items, lieux, ordre = ['outillage', 'accessoire', 'consommable', 'materiel']) {
   return ordre
     .map((type) => ({ type, items: items.filter((i) => i.article.type === type) }))
     .filter((g) => g.items.length)

@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { findSameName } from '../../shared/match.js';
+import { createNamed } from '../actions.js';
 
 const ICONS = {
   check: 'M5 12.5l4.5 4.5L19 7',
@@ -65,12 +67,22 @@ export function Button({ variant = 'secondary', className = '', icon, children, 
 }
 
 /** Grande case à cocher tactile : vide (gris), partielle (orange), complète (vert). */
-export function BigCheck({ etat = 'vide', onClick, label, size = 'size-14', disabled }) {
+export function BigCheck({ etat = 'vide', onClick, label, size = 'size-14', disabled, compact }) {
   const styles = {
     vide: 'border-2 border-slate-300 bg-white text-transparent dark:border-slate-600 dark:bg-slate-900',
     partiel: 'border-2 border-amber-500 bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300',
     complet: 'border-2 border-emerald-600 bg-emerald-600 text-white',
   };
+  if (compact) {
+    // Affichage dense : la case dessinée est petite, mais la zone à toucher reste d'environ 44 px.
+    return (
+      <button type="button" onClick={onClick} disabled={disabled} aria-label={label} aria-pressed={etat === 'complet'} className="-m-1.5 flex size-11 shrink-0 items-center justify-center disabled:opacity-40">
+        <span className={`flex size-7 items-center justify-center rounded-lg transition-all active:scale-90 ${styles[etat]}`}>
+          {etat === 'partiel' ? <Icon name="minus" className="size-4" strokeWidth={3} /> : <Icon name="check" className="size-5" strokeWidth={3} />}
+        </span>
+      </button>
+    );
+  }
   return (
     <button
       type="button"
@@ -78,7 +90,7 @@ export function BigCheck({ etat = 'vide', onClick, label, size = 'size-14', disa
       disabled={disabled}
       aria-label={label}
       aria-pressed={etat === 'complet'}
-      className={`${size} flex shrink-0 items-center justify-center rounded-2xl transition-all active:scale-90 ${styles[etat]}`}
+      className={`${size} flex shrink-0 items-center justify-center rounded-2xl transition-all active:scale-90 disabled:opacity-40 ${styles[etat]}`}
     >
       {etat === 'partiel' ? <Icon name="minus" className="size-7" strokeWidth={3} /> : <Icon name="check" className="size-8" strokeWidth={3} />}
     </button>
@@ -200,15 +212,35 @@ export function TextField({ value, onChange, multiline, className = '', ...props
   );
 }
 
-export function LieuSelect({ lieux, value, onChange, className = '', allowEmpty = true, emptyLabel = '— Lieu ? —' }) {
+const NOUVEAU = '__nouveau__';
+
+/** Crée un lieu ou une catégorie depuis une liste déroulante (ou réutilise celui qui porte déjà ce nom). */
+async function creerDepuisListe(table, existants, libelle) {
+  const nom = prompt(libelle)?.trim();
+  if (!nom) return null;
+  const deja = findSameName(nom, existants);
+  return deja ? deja.id : createNamed(table, nom);
+}
+
+export function LieuSelect({ lieux, value, onChange, className = '', allowEmpty = true, emptyLabel = '— Lieu ? —', creer = true }) {
   return (
-    <select className={className} value={value ?? ''} onChange={(e) => onChange(e.target.value || null)} aria-label="Lieu de stockage">
+    <select
+      className={className}
+      value={value ?? ''}
+      onChange={async (e) => {
+        if (e.target.value !== NOUVEAU) return onChange(e.target.value || null);
+        const id = await creerDepuisListe('lieux', lieux, 'Nom du nouveau lieu de rangement :');
+        if (id) onChange(id);
+      }}
+      aria-label="Lieu de stockage"
+    >
       {allowEmpty && <option value="">{emptyLabel}</option>}
       {lieux.map((l) => (
         <option key={l.id} value={l.id}>
           {l.nom}
         </option>
       ))}
+      {creer && <option value={NOUVEAU}>＋ Nouveau lieu…</option>}
     </select>
   );
 }
@@ -252,21 +284,53 @@ export function Segmented({ options, value, onChange }) {
   );
 }
 
-export function CategorieSelect({ categories, value, onChange, className = '', emptyLabel = '— Catégorie ? —' }) {
+export function CategorieSelect({ categories, value, onChange, className = '', emptyLabel = '— Catégorie ? —', creer = true }) {
   return (
-    <select className={className} value={value ?? ''} onChange={(e) => onChange(e.target.value || null)} aria-label="Catégorie">
+    <select
+      className={className}
+      value={value ?? ''}
+      onChange={async (e) => {
+        if (e.target.value !== NOUVEAU) return onChange(e.target.value || null);
+        const id = await creerDepuisListe('categories', categories, 'Nom de la nouvelle catégorie :');
+        if (id) onChange(id);
+      }}
+      aria-label="Catégorie"
+    >
       <option value="">{emptyLabel}</option>
       {categories.map((c) => (
         <option key={c.id} value={c.id}>
           {c.nom}
         </option>
       ))}
+      {creer && <option value={NOUVEAU}>＋ Nouvelle catégorie…</option>}
     </select>
   );
 }
 
 export const TYPE_OPTIONS = [
-  ['outillage', '🔧 Outillage'],
+  ['outillage', '🔧 Outil.'],
+  ['accessoire', '🔋 Access.'],
   ['consommable', '⚙️ Conso.'],
   ['materiel', '📦 Matériel'],
 ];
+
+/** Rangée de puces (filtres, classements) : plus fine en affichage dense. */
+export function Puces({ options, value, onChange, dense, multiple = false }) {
+  const actif = (v) => (multiple ? value.includes(v) : value === v);
+  return (
+    <div className="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-1">
+      {options.map(([v, label, n]) => (
+        <button
+          key={v}
+          type="button"
+          aria-pressed={actif(v)}
+          onClick={() => onChange(multiple ? (actif(v) ? value.filter((x) => x !== v) : [...value, v]) : v)}
+          className={`shrink-0 rounded-full font-medium ${dense ? 'min-h-8 px-3 text-xs' : 'min-h-10 px-4 text-sm'} ${actif(v) ? 'bg-sky-600 text-white' : 'bg-white text-slate-700 shadow-sm dark:bg-slate-900 dark:text-slate-300'}`}
+        >
+          {label}
+          {n != null && <span className="ml-1 opacity-60">{n}</span>}
+        </button>
+      ))}
+    </div>
+  );
+}

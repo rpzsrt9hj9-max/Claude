@@ -74,9 +74,20 @@ export function voyageDe(intervention, data) {
   return intervention.voyage_id && reels.has(intervention.voyage_id) ? intervention.voyage_id : intervention.id;
 }
 
+/** Nom affiché d'une intervention : le bien d'abord, puis le nom choisi (« Bien A · rotation locataire »). */
 export function nomIntervention(intervention, data) {
   const bien = data.appartements.find((a) => a.id === bienIntervention(intervention, data));
-  return bien ? bien.nom : intervention.nom;
+  const perso = intervention.nom_perso?.trim();
+  if (bien) return perso ? `${bien.nom} · ${perso}` : bien.nom;
+  return perso || intervention.nom;
+}
+
+/** « Déplacement › Intervention » (sans répéter le déplacement dans le nom de l'intervention). */
+export function libellePlanification(intervention, data) {
+  if (!intervention) return null;
+  const voyage = trouverVoyage(voyageDe(intervention, data), data);
+  const nom = nomIntervention(intervention, data);
+  return voyage && !voyage.virtuel ? `${voyage.nom} › ${nom}` : nom;
 }
 
 /**

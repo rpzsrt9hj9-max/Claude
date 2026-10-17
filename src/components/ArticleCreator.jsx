@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { findSimilar, findSameName, STRONG } from '../../shared/match.js';
 import { suggestCategorie } from '../../shared/categories.js';
 import { TYPES, TYPE_ICON } from '../../shared/schema.js';
+import { estBatterie, estChargeur } from '../../shared/accessoires.js';
 import { createArticle } from '../actions.js';
 import { Button, CategorieSelect, LieuSelect, Segmented, TYPE_OPTIONS } from './ui.jsx';
 
@@ -10,7 +11,9 @@ import { Button, CategorieSelect, LieuSelect, Segmented, TYPE_OPTIONS } from './
  * Si une ressemblance forte existe, la création demande une confirmation explicite.
  */
 export function ArticleCreator({ nom, articles, lieux, categories = [], defaultType = 'materiel', onUseExisting, onCreated, onCancel }) {
-  const [type, setType] = useState(defaultType);
+  // Une batterie ou un chargeur est un accessoire, quel que soit l'onglet d'où on le crée.
+  const [type, setType] = useState(estBatterie({ nom }) || estChargeur({ nom }) ? 'accessoire' : defaultType);
+  const [aAcheterCoche, setAAcheter] = useState(false);
   const [lieuId, setLieuId] = useState(null);
   const suggested = useMemo(() => suggestCategorie(nom, { categories, articles }), [nom, categories, articles]);
   const [categorieId, setCategorieId] = useState(suggested?.id ?? null);
@@ -25,7 +28,7 @@ export function ArticleCreator({ nom, articles, lieux, categories = [], defaultT
 
   const create = async () => {
     try {
-      const id = await createArticle({ nom, type, lieu_id: lieuId, categorie_id: categorieId, unite }, articles);
+      const id = await createArticle({ nom, type, lieu_id: lieuId, categorie_id: categorieId, unite, a_acheter: aAcheterCoche }, articles);
       onCreated(id);
     } catch (e) {
       setError(e.message);
@@ -60,13 +63,19 @@ export function ArticleCreator({ nom, articles, lieux, categories = [], defaultT
       {!same && !mustConfirm && (
         <>
           <p className="font-semibold">Nouvel article : « {nom.trim()} »</p>
-          <Segmented options={TYPE_OPTIONS} value={type} onChange={setType} />
+          <div className="-mx-1 overflow-x-auto px-1">
+            <Segmented options={TYPE_OPTIONS} value={type} onChange={setType} />
+          </div>
           <div className="grid grid-cols-2 gap-2">
             <LieuSelect lieux={lieux} value={lieuId} onChange={setLieuId} />
             <CategorieSelect categories={categories} value={categorieId} onChange={setCategorieId} />
           </div>
           {suggested && categorieId === suggested.id && <p className="-mt-1 text-xs text-slate-500">Catégorie proposée automatiquement</p>}
           <input className="w-full" placeholder="Unité (facultatif : pièce, m, L…)" value={unite} onChange={(e) => setUnite(e.target.value)} aria-label="Unité" />
+          <label className="flex min-h-11 items-center gap-3 rounded-xl bg-amber-50 px-3 dark:bg-amber-500/10">
+            <input type="checkbox" className="size-6 !min-h-0" checked={aAcheterCoche} onChange={(e) => setAAcheter(e.target.checked)} />
+            <span className="font-medium">🛒 Je ne l'ai pas : à acheter</span>
+          </label>
           {error && <p className="text-sm text-red-600">{error}</p>}
           <div className="flex gap-2">
             <Button variant="primary" className="flex-1" icon="plus" onClick={create}>
