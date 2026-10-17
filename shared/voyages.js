@@ -55,7 +55,6 @@ export function tachesVoyage(voyageId, data, tousLiens = liens(data)) {
 export function statutVoyage(voyageId, data) {
   const its = interventionsDuVoyage(voyageId, data);
   if (its.length && its.every((i) => i.statut === 'termine')) return 'termine';
-  if (its.some((i) => i.statut === 'en_cours' || i.statut === 'termine')) return 'en_cours';
   return 'en_preparation';
 }
 

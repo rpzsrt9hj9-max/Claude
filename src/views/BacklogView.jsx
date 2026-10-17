@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react';
 import { useData, useLocalState } from '../data.js';
 import { BigCheck, Button, Empty, Icon, MicButton, Sheet } from '../components/ui.jsx';
 import { TacheEditor } from './TacheEditor.jsx';
-import { saveTache, setStatutTache, createFromModeles } from '../actions.js';
+import { saveTache, setStatutTache, createFromModeles, supprimerTache } from '../actions.js';
+import { Glissable } from '../components/Glissable.jsx';
 import { matchesSearch } from '../../shared/match.js';
 import { STATUTS_TACHE, enRetard, joursDepuis, liens, planification, progressionEtapes, statutTache, tachesGenerales } from '../../shared/interventions.js';
 import { CLASSEMENTS_TACHES, classerTaches } from '../../shared/classement.js';
@@ -111,7 +112,9 @@ export function BacklogView() {
   };
 
   // En classement par bien ou par déplacement, les titres de groupes disent déjà où est la tâche.
-  const ligne = (t) => <LigneTache key={t.id} tache={t} app={appById.get(t.appartement_id)} intervention={planification(t.id, data, tousLiens)} onOpen={() => setEditing(t.id)} dense={dense} groupee={classement !== 'echeance'} />;
+  const ligne = (t) => (
+    <LigneTache key={t.id} tache={t} app={appById.get(t.appartement_id)} intervention={planification(t.id, data, tousLiens)} onOpen={() => setEditing(t.id)} dense={dense} groupee={classement !== 'echeance'} onSupprimer={() => supprimerTache(t, data)} />
+  );
 
   return (
     <div className={dense ? 'space-y-2' : 'space-y-4'}>
@@ -287,7 +290,7 @@ export function ChoixModele({ onClose, onVide, onModeles }) {
 }
 
 /** Ligne de tâche de la liste générale. Ligne 2 : « Déplacement › Intervention · échéance » (ou le bien si non planifiée). */
-export function LigneTache({ tache, app, intervention, onOpen, extra, dense, groupee = false }) {
+export function LigneTache({ tache, app, intervention, onOpen, extra, dense, groupee = false, onSupprimer }) {
   const { data } = useData();
   const s = statutTache(tache);
   const fait = s === 'terminee';
@@ -306,9 +309,11 @@ export function LigneTache({ tache, app, intervention, onOpen, extra, dense, gro
       {nbCom > 0 && <span>💬 {nbCom}</span>}
     </>
   );
+  const fond = fait ? 'bg-slate-100 dark:bg-slate-900' : 'bg-white dark:bg-slate-900';
   if (dense)
     return (
-      <li className={`flex items-center gap-2 rounded-xl py-1 pr-2 pl-2.5 shadow-sm ${fait ? 'bg-slate-100 opacity-60 dark:bg-slate-900/50' : 'bg-white dark:bg-slate-900'}`}>
+      <Glissable className="rounded-xl shadow-sm" fond={fond} supprimer={onSupprimer}>
+      <div className={`flex items-center gap-2 py-1 pr-2 pl-2.5 ${fait ? 'opacity-60' : ''}`}>
         <BigCheck compact etat={fait ? 'complet' : 'vide'} label={fait ? 'Remettre à traiter' : 'Marquer terminée'} onClick={() => setStatutTache(tache, fait ? 'a_traiter' : 'terminee')} />
         <button type="button" className="min-h-11 min-w-0 flex-1 text-left" onClick={onOpen}>
           <span className={`block truncate text-[15px] font-semibold ${fait ? 'line-through' : ''}`}>{tache.titre}</span>
@@ -327,10 +332,12 @@ export function LigneTache({ tache, app, intervention, onOpen, extra, dense, gro
           </span>
           {extra}
         </button>
-      </li>
+      </div>
+      </Glissable>
     );
   return (
-    <li className={`flex items-center gap-3 rounded-2xl p-2 shadow-sm ${fait ? 'bg-slate-100 opacity-60 dark:bg-slate-900/50' : 'bg-white dark:bg-slate-900'}`}>
+    <Glissable className="rounded-2xl shadow-sm" fond={fond} supprimer={onSupprimer}>
+    <div className={`flex items-center gap-3 p-2 ${fait ? 'opacity-60' : ''}`}>
       <BigCheck size="size-12" etat={fait ? 'complet' : 'vide'} label={fait ? 'Remettre à traiter' : 'Marquer terminée'} onClick={() => setStatutTache(tache, fait ? 'a_traiter' : 'terminee')} />
       <button type="button" className="min-h-12 min-w-0 flex-1 text-left" onClick={onOpen}>
         <span className={`block font-semibold break-words ${fait ? 'line-through' : ''}`}>
@@ -345,6 +352,7 @@ export function LigneTache({ tache, app, intervention, onOpen, extra, dense, gro
         {extra}
       </button>
       <Icon name="chevron" className="size-5 shrink-0 text-slate-400" />
-    </li>
+    </div>
+    </Glissable>
   );
 }

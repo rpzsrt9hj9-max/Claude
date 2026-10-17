@@ -107,7 +107,8 @@ L'utilisateur demande de **garder la version précédente à chaque mise à jour
 | v1 (interventions) | `a61ee5f` | /Claude/deplacements/v1/ |
 | v2 (déplacements) | `84e9327` | /Claude/deplacements/v2/ |
 | v3 (onglet Interventions) | `bd21a5c` | /Claude/deplacements/v3/ |
-| v4 (famille, achats, accessoires, dense) | dernier commit de `claude/deplacements-app` | /Claude/deplacements/ |
+| v4 (famille, achats, accessoires, dense) | `2265777` | /Claude/deplacements/v4/ |
+| v4.1 (glisser / croix pour supprimer, annuler, statut simplifié) | dernier commit de `claude/deplacements-app` | /Claude/deplacements/ |
 
 Pour publier une ancienne version : `git worktree add ../vN <commit>`, y remplacer le nom de la base Dexie `'deplacements'` par `'deplacements-vN'` (src/db.js), puis `BASE=/Claude/deplacements/vN/ npx vite build` et copier `dist/` dans `site/deplacements/vN/`. La version actuelle a `navigateFallbackDenylist: [/\/v\d+\//]` pour que son service worker ne capture pas les anciennes versions.
 
@@ -144,6 +145,12 @@ Une seule version v4 regroupe tout ce qui suit (choix de l'utilisateur). La v3 r
 **Options développeur** (Plus, visibles par tous) : blocage « pris » si à acheter (activé), filtres du catalogue toujours visibles (désactivé).
 
 **Journal des versions** : page « Nouveautés » dans Plus + `CHANGELOG.md` ; une note récapitulative à chaque nouvelle version.
+
+### v4.1 (17/10/2026)
+- `src/components/Glissable.jsx` : ligne glissable (partiel = retirer en bleu, presque complet = supprimer en rouge, liseré à droite) ou petites croix selon le réglage `suppression` ('glisser' | 'croix') ; `BandeauAnnulation` en bas, non bloquant.
+- `src/annulation.js` : `avecAnnulation(writes, message)` mémorise les champs d'avant et propose « Annuler » 6 s. Actions : `supprimerTache`, `retirerTacheAnnulable`, `supprimerArticle`.
+- Statut des interventions : plus que « à faire » / « terminée » (l'ancien `en_cours` s'affiche « À faire » ; `statutVoyage` ne renvoie plus `en_cours`). Bouton « Démarrer » supprimé, « Rouvrir » remet `en_preparation`.
+- Crayon (intervention, déplacement) : focus automatique dans le nom.
 
 ### État de la v4 (17/10/2026) : faite et testée
 - Logique partagée : `shared/references.js`, `shared/accessoires.js`, `shared/classement.js`, `shared/achats.js` (+ `computeTrip` pour les batteries). Tests : 69 (`tests/v4.test.js` en plus) ; `tests/securite.mjs` 38/38 ; migration SQL v4 testée (PGlite) et rejouable.

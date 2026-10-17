@@ -42,9 +42,10 @@ export const TABLE_NAMES = Object.keys(TABLES);
 export const BOOL_FIELDS = new Set(['cumul_quantites', 'fait', 'pris', 'deleted', 'modele', 'dans_rapport', 'a_acheter']);
 export const REAL_FIELDS = new Set(['quantite', 'quantite_prise', 'ordre', 'ref', 'achete_le']);
 
+// Deux états visibles : « À faire » et « Terminée » (l'ancien « En cours » s'affiche « À faire »).
 export const STATUTS = {
-  en_preparation: 'En préparation',
-  en_cours: 'En cours',
+  en_preparation: 'À faire',
+  en_cours: 'À faire',
   termine: 'Terminée',
 };
 

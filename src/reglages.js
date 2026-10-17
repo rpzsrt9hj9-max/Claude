@@ -5,6 +5,7 @@ const CLE = 'reglages-appareil';
 const DEFAUTS = {
   dense: false, // Affichage : Standard / Dense
   ajoutRapide: true, // champ « Ajout rapide » en haut de la liste des tâches
+  suppression: 'glisser', // 'glisser' (vers la gauche : partiel = retirer, complet = supprimer) ou 'croix' (petites croix bleue / rouge)
   // Options développeur
   bloquerPrisSiAAcheter: true, // dans « Charger », un article à acheter ne se coche « pris » qu'après achat
   filtresVisibles: false, // catalogue : filtres toujours affichés (sinon derrière le bouton « Filtres »)

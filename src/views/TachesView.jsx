@@ -6,7 +6,8 @@ import { TacheEditor } from './TacheEditor.jsx';
 import { BoutonAjout, ChoixModele, dateCourte } from './BacklogView.jsx';
 import { useReglages } from '../reglages.js';
 import { ChoixTaches } from './ChoixTaches.jsx';
-import { saveTache, setStatutTache, createFromModeles, addTachesToIntervention, addTachesToVoyage, removeTacheFromIntervention } from '../actions.js';
+import { saveTache, setStatutTache, createFromModeles, addTachesToIntervention, addTachesToVoyage, retirerTacheAnnulable, supprimerTache } from '../actions.js';
+import { Glissable } from '../components/Glissable.jsx';
 import { bienIntervention, interventionsDuVoyage } from '../../shared/voyages.js';
 import { TYPES, TYPE_ICON, TYPE_ORDER } from '../../shared/schema.js';
 import { STATUTS_TACHE, enRetard, statutTache } from '../../shared/interventions.js';
@@ -117,7 +118,8 @@ export function TachesView() {
                 info={t}
                 dense={dense}
                 onOpen={() => setEditing(t.tache.id)}
-                onRemove={ouverte ? () => confirm(`Retirer « ${t.tache.titre} » de l'intervention ? Elle reste dans la liste des tâches.`) && removeTacheFromIntervention(interventionId, t.tache.id, data) : null}
+                onRetirer={ouverte ? () => retirerTacheAnnulable(interventionId, t.tache, data) : null}
+                onSupprimer={() => supprimerTache(t.tache, data)}
               />
             ))}
           </ul>
@@ -159,15 +161,12 @@ export function TachesView() {
   );
 }
 
-function TacheRow({ info, onOpen, onRemove, dense }) {
+function TacheRow({ info, onOpen, onRetirer, onSupprimer, dense }) {
   const { tache, prete, byType } = info;
   const statut = statutTache(tache);
   const fait = statut === 'terminee';
-  const tone = fait
-    ? 'bg-slate-100 opacity-60 dark:bg-slate-900/50'
-    : prete
-      ? 'bg-emerald-50 ring-2 ring-emerald-500/60 dark:bg-emerald-500/10'
-      : 'bg-white dark:bg-slate-900';
+  // Fonds opaques : la couleur du glissement apparaît dessous.
+  const tone = fait ? 'bg-slate-100 dark:bg-slate-900' : prete ? 'bg-emerald-50 ring-2 ring-inset ring-emerald-500/60 dark:bg-emerald-950' : 'bg-white dark:bg-slate-900';
   const pastilles = TYPE_ORDER.map((type) => {
     const list = byType[type] ?? [];
     if (!list.length) return null;
@@ -178,9 +177,11 @@ function TacheRow({ info, onOpen, onRemove, dense }) {
       </Pill>
     );
   });
+  const glisse = { retirer: onRetirer, supprimer: onSupprimer, libelleRetirer: 'Retirer de l’intervention' };
   if (dense)
     return (
-      <li className={`flex items-center gap-2 rounded-xl py-1 pr-1 pl-2.5 shadow-sm ${fait ? 'bg-slate-100 opacity-60 dark:bg-slate-900/50' : 'bg-white dark:bg-slate-900'}`}>
+      <Glissable className="rounded-xl shadow-sm" fond={fait ? 'bg-slate-100 dark:bg-slate-900' : 'bg-white dark:bg-slate-900'} {...glisse}>
+      <div className={`flex items-center gap-2 py-1 pr-1 pl-2.5 ${fait ? 'opacity-60' : ''}`}>
         <BigCheck compact etat={fait ? 'complet' : 'vide'} label={fait ? 'Remettre à traiter' : 'Marquer terminée'} onClick={() => setStatutTache(tache, fait ? 'a_traiter' : 'terminee')} />
         <button type="button" className="min-h-11 min-w-0 flex-1 text-left" onClick={onOpen}>
           <span className={`flex items-center gap-1.5 text-[15px] font-semibold ${fait ? 'line-through' : ''}`}>
@@ -195,11 +196,12 @@ function TacheRow({ info, onOpen, onRemove, dense }) {
           )}
           <span className="mt-0.5 hidden flex-wrap gap-1 sm:flex">{pastilles}</span>
         </button>
-        {onRemove && <Button variant="ghost" icon="x" aria-label={`Retirer ${tache.titre} de l'intervention`} className="!px-2 text-slate-400" onClick={onRemove} />}
-      </li>
+      </div>
+      </Glissable>
     );
   return (
-    <li className={`rounded-2xl p-2 shadow-sm ${tone}`}>
+    <Glissable className="rounded-2xl shadow-sm" fond={tone} {...glisse}>
+    <div className={`p-2 ${fait ? 'opacity-60' : ''}`}>
       <div className="flex items-center gap-3">
         <BigCheck size="size-12" etat={fait ? 'complet' : 'vide'} label={fait ? 'Remettre à traiter' : 'Marquer terminée'} onClick={() => setStatutTache(tache, fait ? 'a_traiter' : 'terminee')} />
         <button type="button" className="min-h-12 min-w-0 flex-1 text-left" onClick={onOpen}>
@@ -211,13 +213,13 @@ function TacheRow({ info, onOpen, onRemove, dense }) {
             {!fait && prete && <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400">✓ Prête</span>}
           </span>
         </button>
-        {onRemove && <Button variant="ghost" icon="x" aria-label={`Retirer ${tache.titre} de l'intervention`} className="!px-2 text-slate-400" onClick={onRemove} />}
       </div>
       {!fait && tache.description?.includes('[') && (
         <div className="mt-1 pl-14">
           <Etapes description={tache.description} tache={tache} compact />
         </div>
       )}
-    </li>
+    </div>
+    </Glissable>
   );
 }

@@ -2,6 +2,14 @@
 
 Même contenu que la page « Nouveautés » de l'appli (Plus → Nouveautés). Les versions précédentes restent en ligne : /Claude/deplacements/vN/.
 
+## v4.1 — Glisser pour supprimer, crayon plus rapide, statut simplifié (17/10/2026)
+
+- Glisser une ligne vers la gauche : à moitié = retirer (bleu, ex. retirer une tâche de l’intervention), presque jusqu’au bout = supprimer (rouge). Un liseré à droite de la ligne montre ce qui est possible (rouge, bleu, ou les deux).
+- Au choix dans Plus → Affichage : glisser, ou petites croix (bleue = retirer, rouge = supprimer). Sur la liste des tâches, les tâches d’une intervention et le catalogue.
+- Bandeau « Annuler » discret en bas de l’écran pendant quelques secondes après une suppression ou un retrait ; on peut continuer à travailler pendant ce temps.
+- Crayon : le curseur se place directement dans le nom.
+- Plus de bouton « Démarrer » ni d’état « En cours » : une intervention est à faire, ou terminée (pastille verte).
+
 ## v4 — Famille, achats, accessoires et affichage dense (17/10/2026)
 
 - Comptes de la famille : chacun crée son compte avec le code famille et a son propre espace ; l’administrateur peut voir et modifier un compte (« Voir comme ») et lit les retours.

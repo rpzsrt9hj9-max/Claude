@@ -1,4 +1,5 @@
 // Actions métier côté client (écritures locales, synchronisées ensuite).
+import { avecAnnulation } from './annulation.js';
 import { db, insert, update, remove, write } from './db.js';
 import { priseId, tacheArticleId, accessoireId, defaultCumul, uuid } from '../shared/schema.js';
 import { findSameName } from '../shared/match.js';
@@ -73,9 +74,15 @@ export async function saveTache(draft, existingLinks = [], ordre = 0) {
   return id;
 }
 
+const ecrituresSuppressionTache = (tache, links) => [{ table: 'taches', row: { id: tache.id, deleted: true } }, ...links.map((l) => ({ table: 'tache_articles', row: { id: l.id, deleted: true } }))];
+
 export async function deleteTache(tache, links) {
-  await write([{ table: 'taches', row: { id: tache.id, deleted: true } }, ...links.map((l) => ({ table: 'tache_articles', row: { id: l.id, deleted: true } }))]);
+  await write(ecrituresSuppressionTache(tache, links));
 }
+
+/** Suppression d'une tâche depuis une liste (croix rouge ou glissement), annulable. */
+export const supprimerTache = (tache, data) =>
+  avecAnnulation(ecrituresSuppressionTache(tache, data.tache_articles.filter((l) => l.tache_id === tache.id)), `Tâche « ${tache.titre} » supprimée`);
 
 export const setFait = (tache, fait) => update('taches', tache.id, { fait, statut: fait ? 'terminee' : 'a_traiter' });
 export const setStatutTache = (tache, statut) => update('taches', tache.id, { statut, fait: statut === 'terminee' });
@@ -181,8 +188,6 @@ export async function deleteVoyage(voyage, data) {
 }
 
 /** Démarre (ou remet en préparation) toutes les interventions ouvertes d'un déplacement. */
-export const setStatutVoyage = (voyage, statut, data) =>
-  write(interventionsDuVoyage(voyage.id, data).filter((i) => i.statut !== 'termine').map((i) => ({ table: 'deplacements', row: { id: i.id, statut } })));
 
 /** Inclure / exclure un commentaire ou une photo du rapport. */
 export const setDansRapport = (table, id, dans_rapport) => update(table, id, { dans_rapport });
@@ -193,6 +198,8 @@ export const updateIntervention = (id, patch) => update('deplacements', id, patc
 export const createIntervention = (nom, date_debut) => insert('deplacements', { nom, date_debut: date_debut || null, statut: 'en_preparation' });
 export const addTachesToIntervention = (interventionId, tacheIds, data) => write(ajouterTaches(interventionId, tacheIds, data));
 export const removeTacheFromIntervention = (interventionId, tacheId, data) => write(retirerTache(interventionId, tacheId, data));
+/** Retrait d'une tâche de l'intervention (croix bleue ou glissement partiel), annulable. La tâche reste dans la liste. */
+export const retirerTacheAnnulable = (interventionId, tache, data) => avecAnnulation(retirerTache(interventionId, tache.id, data), `« ${tache.titre} » retirée de l'intervention`);
 export const closeIntervention = (interventionId, choix, data) => write(cloturer(interventionId, choix, data));
 
 /** Supprime une intervention : ses liens et cases « Pris » ; les tâches restent dans la liste générale. */
@@ -236,17 +243,24 @@ export async function deleteCommentaire(commentaire) {
 
 export const updateArticle = (id, patch) => update('articles', id, patch);
 
-export async function deleteArticle(article, data) {
+function ecrituresSuppressionArticle(article, data) {
   const links = data.tache_articles.filter((l) => l.article_id === article.id);
   const prises = data.prise_articles.filter((p) => p.article_id === article.id);
   const accs = data.article_accessoires.filter((x) => x.article_id === article.id || x.accessoire_id === article.id);
-  await write([
+  return [
     ...accs.map((x) => ({ table: 'article_accessoires', row: { id: x.id, deleted: true } })),
     { table: 'articles', row: { id: article.id, deleted: true } },
     ...links.map((l) => ({ table: 'tache_articles', row: { id: l.id, deleted: true } })),
     ...prises.map((p) => ({ table: 'prise_articles', row: { id: p.id, deleted: true } })),
-  ]);
+  ];
 }
+
+export async function deleteArticle(article, data) {
+  await write(ecrituresSuppressionArticle(article, data));
+}
+
+/** Suppression d'un article depuis le catalogue (croix rouge ou glissement), annulable. */
+export const supprimerArticle = (article, data) => avecAnnulation(ecrituresSuppressionArticle(article, data), `« ${article.nom} » supprimé du catalogue`);
 
 export const merge = (keepId, dropId, data) => write(mergeArticles(keepId, dropId, data));
 

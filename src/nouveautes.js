@@ -1,6 +1,18 @@
 // Journal des versions affiché dans l'appli (Plus → Nouveautés) ; même contenu que CHANGELOG.md.
 export const NOUVEAUTES = [
   {
+    version: 'v4.1',
+    date: '2026-10-17',
+    titre: 'Glisser pour supprimer, crayon plus rapide, statut simplifié',
+    points: [
+      'Glisser une ligne vers la gauche : à moitié = retirer (bleu, ex. retirer une tâche de l’intervention), presque jusqu’au bout = supprimer (rouge). Un liseré à droite de la ligne montre ce qui est possible (rouge, bleu, ou les deux).',
+      'Au choix dans Plus → Affichage : glisser, ou petites croix (bleue = retirer, rouge = supprimer). Sur la liste des tâches, les tâches d’une intervention et le catalogue.',
+      'Bandeau « Annuler » discret en bas de l’écran pendant quelques secondes après une suppression ou un retrait ; on peut continuer à travailler pendant ce temps.',
+      'Crayon : le curseur se place directement dans le nom.',
+      'Plus de bouton « Démarrer » ni d’état « En cours » : une intervention est à faire, ou terminée (pastille verte).',
+    ],
+  },
+  {
     version: 'v4',
     date: '2026-10-17',
     titre: 'Famille, achats, accessoires et affichage dense',

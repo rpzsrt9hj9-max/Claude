@@ -113,7 +113,7 @@ describe('déplacements', () => {
     expect(statutVoyage(id, d)).toBe('en_preparation');
     const [ia, ib] = interventionsDuVoyage(id, d);
     d = applyWrites(d, [{ table: 'deplacements', row: { id: ia.id, statut: 'termine' } }]);
-    expect(statutVoyage(id, d)).toBe('en_cours');
+    expect(statutVoyage(id, d)).toBe('en_preparation'); // plus d'état « en cours » : à faire tant que tout n'est pas terminé
     d = applyWrites(d, [{ table: 'deplacements', row: { id: ib.id, statut: 'termine' } }]);
     expect(statutVoyage(id, d)).toBe('termine');
   });

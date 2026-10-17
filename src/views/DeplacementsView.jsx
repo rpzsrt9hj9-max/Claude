@@ -23,18 +23,20 @@ import { ChecklistView, PrintableList } from './ChecklistView.jsx';
 import { ChoixTaches } from './ChoixTaches.jsx';
 import * as A from '../actions.js';
 
+/** À l'ouverture d'une fiche par le crayon, le curseur se place à la fin du nom (un toucher de moins). */
+const curseurAuBout = (e) => {
+  const n = e.target.value.length;
+  e.target.setSelectionRange?.(n, n);
+};
+
 export const dateLongue = (iso) => (iso ? new Date(`${iso.slice(0, 10)}T00:00`).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : 'Date à fixer');
 
-const COULEUR_STATUT = {
-  en_preparation: 'bg-sky-100 text-sky-800 dark:bg-sky-500/20 dark:text-sky-300',
-  en_cours: 'bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300',
-  termine: 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
-};
-const TEXTE_STATUT = { en_preparation: 'text-sky-700 dark:text-sky-400', en_cours: 'font-semibold text-amber-700 dark:text-amber-400', termine: 'text-emerald-700 dark:text-emerald-400' };
-const LIBELLE_VOYAGE = { en_preparation: 'En préparation', en_cours: 'En cours', termine: 'Terminé' };
-export const BadgeStatut = ({ statut, voyage }) => (
-  <span className={`shrink-0 rounded-full px-2 py-1 text-xs font-bold ${COULEUR_STATUT[statut] ?? ''}`}>{(voyage ? LIBELLE_VOYAGE : STATUTS)[statut] ?? statut}</span>
-);
+const COULEUR_STATUT = { termine: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300' };
+const TEXTE_STATUT = { termine: 'text-emerald-700 dark:text-emerald-400' };
+const LIBELLE_VOYAGE = { termine: 'Terminé' };
+/** Deux états seulement : à faire (pas de pastille) ou terminé (pastille verte). */
+export const BadgeStatut = ({ statut, voyage }) =>
+  statut === 'termine' ? <span className={`shrink-0 rounded-full px-2 py-1 text-xs font-bold ${COULEUR_STATUT.termine}`}>{(voyage ? LIBELLE_VOYAGE : STATUTS).termine}</span> : null;
 
 function Onglets({ onglets, valeur, onChange, badges = {}, alertes = {} }) {
   const { dense } = useReglages();
@@ -80,7 +82,8 @@ function CarteIntervention({ i, voyage, onOpen, onEdit, detail }) {
             {i.ref ? <span className="shrink-0 text-[11px] text-slate-400">{refIntervention(i)}</span> : null}
           </span>
           <span className="block truncate text-xs text-slate-500">
-            <span className={TEXTE_STATUT[i.statut]}>{STATUTS[i.statut]}</span> · {i.date_debut ? dateCourte(i.date_debut) : 'Date à fixer'}
+            {i.statut === 'termine' && <span className={TEXTE_STATUT.termine}>Terminée · </span>}
+            {i.date_debut ? dateCourte(i.date_debut) : 'Date à fixer'}
             {voyage && !voyage.virtuel ? ` · 🚐 ${voyage.nom}` : ''}
             {detail ? ` · ${detail}` : ''}
           </span>
@@ -366,17 +369,12 @@ function ReglagesVoyage({ voyage, statut, onClose, onDeleted }) {
       <div className="space-y-4">
         <label className="block">
           <span className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-400">Nom</span>
-          <TextField value={nom} onChange={setNom} />
+          <TextField value={nom} onChange={setNom} autoFocus onFocus={curseurAuBout} aria-label="Nom du déplacement" />
         </label>
         <label className="block">
           <span className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-400">Date (reportée sur les interventions)</span>
           <input type="date" className="w-full" value={date} onChange={(e) => setDate(e.target.value)} />
         </label>
-        {statut === 'en_preparation' && (
-          <Button className="w-full" onClick={async () => { await A.setStatutVoyage(voyage, 'en_cours', data); onClose(); }}>
-            ▶️ Démarrer le déplacement
-          </Button>
-        )}
         <Button variant="ghost" icon="trash" className="w-full !text-red-600" onClick={del}>
           Supprimer le déplacement
         </Button>
@@ -470,17 +468,17 @@ function ReglagesIntervention({ dep, onClose, onDeleted }) {
       <div className="space-y-4">
         <label className="block">
           <span className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-400">Nom {bien ? `(affiché « ${bien.nom} · … »)` : ''}</span>
-          <TextField value={nom} onChange={setNom} placeholder="ex. : rotation locataire" aria-label="Nom de l'intervention" />
+          <TextField value={nom} onChange={setNom} placeholder="ex. : rotation locataire" aria-label="Nom de l'intervention" autoFocus onFocus={curseurAuBout} />
         </label>
         <label className="block">
           <span className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-400">Date d'intervention</span>
           <input type="date" className="w-full" value={date} onChange={(e) => setDate(e.target.value)} />
         </label>
-        <div className="grid grid-cols-2 gap-2">
-          {dep.statut === 'en_preparation' && <Button onClick={() => A.setStatut(dep, 'en_cours')}>▶️ Démarrer</Button>}
-          {dep.statut === 'en_cours' && <Button onClick={() => A.setStatut(dep, 'en_preparation')}>En préparation</Button>}
-          {dep.statut === 'termine' && <Button onClick={() => A.setStatut(dep, 'en_cours')}>Rouvrir</Button>}
-        </div>
+        {dep.statut === 'termine' && (
+          <Button className="w-full" onClick={() => A.setStatut(dep, 'en_preparation')}>
+            Rouvrir l'intervention
+          </Button>
+        )}
         <Button variant="ghost" icon="trash" className="w-full !text-red-600" onClick={del}>
           Supprimer l'intervention
         </Button>

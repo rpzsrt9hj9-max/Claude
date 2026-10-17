@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Glissable } from '../components/Glissable.jsx';
 import { useData, useLocalState } from '../data.js';
 import { TYPES, TYPE_ICON } from '../../shared/schema.js';
 import { findSameName, matchesSearch, nameKey, similarity, STRONG } from '../../shared/match.js';
@@ -128,6 +129,17 @@ export function PlusView({ theme, setTheme }) {
           <Segmented options={[['light', '☀️ Clair'], ['dark', '🌙 Sombre']]} value={theme} onChange={setTheme} />
         </div>
         <Interrupteur titre="Ajout rapide des tâches" detail="Champ de saisie en haut de la liste des tâches" valeur={reglages.ajoutRapide} onChange={(v) => changerReglage('ajoutRapide', v)} />
+        <div className="py-2">
+          <div className="flex items-center justify-between gap-3">
+            <span>Supprimer / retirer</span>
+            <Segmented options={[['glisser', '👈 Glisser'], ['croix', '✕ Croix']]} value={reglages.suppression} onChange={(v) => changerReglage('suppression', v)} />
+          </div>
+          <p className="mt-1 text-xs text-slate-500">
+            {reglages.suppression === 'croix'
+              ? 'Croix bleue = retirer (la tâche reste dans la liste), croix rouge = supprimer.'
+              : 'Glisser une ligne vers la gauche : à moitié = retirer (bleu), presque jusqu’au bout = supprimer (rouge). Un liseré à droite montre ce qui est possible.'}
+          </p>
+        </div>
       </section>
 
       <section className="space-y-1 rounded-2xl bg-white p-3 shadow-sm dark:bg-slate-900">
@@ -410,7 +422,7 @@ export function Catalogue() {
               const qte = quantiteStock(a.id, data.stocks);
               const choisi = selection?.has(a.id);
               return (
-                <li key={a.id}>
+                <Glissable key={a.id} fond="bg-white dark:bg-slate-900" supprimer={selection ? null : () => A.supprimerArticle(a, data)}>
                   <button
                     type="button"
                     onClick={() => (selection ? toggleSel(a.id) : setEditing(a))}
@@ -436,7 +448,7 @@ export function Catalogue() {
                     {dense && a.lieu_id && <span className="max-w-[35%] shrink-0 truncate text-xs text-slate-500">{lieux.get(a.lieu_id)}</span>}
                     {qte != null && <span className="shrink-0 rounded-full bg-slate-100 px-2 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-300">× {qte}</span>}
                   </button>
-                </li>
+                </Glissable>
               );
             })}
           </ul>

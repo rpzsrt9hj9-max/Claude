@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { BandeauAnnulation } from './components/Glissable.jsx';
 import { DataContext, useAllData, useLocalState, useSyncState } from './data.js';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { DEMO, db, login, quitterObservation, signup } from './db.js';
@@ -88,6 +89,7 @@ function Main({ data, sync: syncInfo }) {
           {tab === 'catalogue' && <Catalogue />}
           {tab === 'plus' && <PlusView theme={theme} setTheme={setTheme} />}
         </main>
+        <BandeauAnnulation />
 
         <nav className="safe-bottom fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 backdrop-blur dark:border-slate-800 dark:bg-slate-900/95">
           <div className="mx-auto flex max-w-2xl">
