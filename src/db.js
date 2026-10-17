@@ -36,6 +36,9 @@ db.version(3).stores({
 db.version(4).stores({
   voyages: 'id, _dirty',
 });
+db.version(5).stores({
+  stocks: 'id, article_id, _dirty',
+});
 
 export const BUCKET = 'photos';
 

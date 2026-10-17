@@ -3,6 +3,7 @@ import { useData, useLocalState } from '../data.js';
 import { Button, Empty, Icon, Sheet } from '../components/ui.jsx';
 import { FiltreBiens, dateCourte } from './BacklogView.jsx';
 import { STATUTS_TACHE, candidats, enRetard, statutTache } from '../../shared/interventions.js';
+import { libellePlanification } from '../../shared/voyages.js';
 
 /**
  * Choix des tâches d'une intervention, avec filtres par biens (choix multiple) et par échéance.
@@ -33,7 +34,7 @@ export function ChoixTaches({ intervention, titre = 'Ajouter des tâches', bouto
     });
   const choisirAilleurs = ({ tache, intervention: autre }) => {
     if (choix.has(tache.id)) return basculer(tache.id);
-    if (confirm(`Retirer « ${tache.titre} » de l'intervention « ${autre.nom} » pour l'attribuer à ce déplacement ?`)) basculer(tache.id);
+    if (confirm(`Retirer « ${tache.titre} » de l'intervention « ${libellePlanification(autre, data)} » pour l'attribuer à ce déplacement ?`)) basculer(tache.id);
   };
   const toutLibre = libres.length > 0 && libres.every((t) => choix.has(t.id));
 
@@ -118,7 +119,7 @@ export function ChoixTaches({ intervention, titre = 'Ajouter des tâches', bouto
           <section>
             <h3 className="mb-2 text-sm font-bold text-slate-500 uppercase">Déjà prévues ailleurs ({ailleurs.length})</h3>
             <ul className="space-y-2 opacity-90">
-              {ailleurs.map((a) => ligne(a.tache, choix.has(a.tache.id), () => choisirAilleurs(a), <span className="text-sky-700 dark:text-sky-400">🚐 {a.intervention.nom}</span>))}
+              {ailleurs.map((a) => ligne(a.tache, choix.has(a.tache.id), () => choisirAilleurs(a), <span className="text-sky-700 dark:text-sky-400">🚐 {libellePlanification(a.intervention, data)}</span>))}
             </ul>
           </section>
         )}

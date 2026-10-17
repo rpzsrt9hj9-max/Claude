@@ -3,7 +3,8 @@ import { useData, useLocalState } from '../data.js';
 import { BigCheck, Button, Empty, Icon, Pill, MicButton } from '../components/ui.jsx';
 import { Etapes } from '../components/Etapes.jsx';
 import { TacheEditor } from './TacheEditor.jsx';
-import { ChoixModele, dateCourte } from './BacklogView.jsx';
+import { BoutonAjout, ChoixModele, dateCourte } from './BacklogView.jsx';
+import { useReglages } from '../reglages.js';
 import { ChoixTaches } from './ChoixTaches.jsx';
 import { saveTache, setStatutTache, createFromModeles, addTachesToIntervention, addTachesToVoyage, removeTacheFromIntervention } from '../actions.js';
 import { bienIntervention, interventionsDuVoyage } from '../../shared/voyages.js';
@@ -14,6 +15,7 @@ import { STATUTS_TACHE, enRetard, statutTache } from '../../shared/interventions
 export function TachesView() {
   const { data, trip, dep, voyage, interventionId } = useData();
   const bien = bienIntervention(dep, data);
+  const { dense, ajoutRapide } = useReglages();
   const [filtre, setFiltre] = useLocalState('filtre-appartement', '');
   const [masquerFaites, setMasquerFaites] = useLocalState('masquer-faites', false);
   const [editing, setEditing] = useState(null); // id de tâche | 'new' | null
@@ -52,13 +54,13 @@ export function TachesView() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className={dense ? 'space-y-2' : 'space-y-4'}>
       <div className="flex gap-2 text-sm text-slate-600 dark:text-slate-400">
         <span>{trip.taches.length} tâches</span>·<span className="text-emerald-700 dark:text-emerald-400">{nbPretes} prêtes</span>·<span>{nbFaites} terminées</span>
       </div>
 
       {ouverte && (
-        <Button variant="primary" icon="plus" className="w-full !min-h-14 text-lg" onClick={() => setAjout(true)}>
+        <Button variant="primary" icon="plus" className={`w-full ${dense ? '' : '!min-h-14 text-lg'}`} onClick={() => setAjout(true)}>
           Ajouter des tâches
         </Button>
       )}
@@ -70,7 +72,7 @@ export function TachesView() {
               key={id || 'all'}
               type="button"
               onClick={() => setFiltre(id)}
-              className={`min-h-11 shrink-0 rounded-full px-4 font-medium ${filtreActif === id ? 'bg-sky-600 text-white' : 'bg-white text-slate-700 shadow-sm dark:bg-slate-900 dark:text-slate-300'}`}
+              className={`${dense ? 'min-h-8 px-3 text-xs' : 'min-h-11 px-4'} shrink-0 rounded-full font-medium ${filtreActif === id ? 'bg-sky-600 text-white' : 'bg-white text-slate-700 shadow-sm dark:bg-slate-900 dark:text-slate-300'}`}
             >
               {nom}
             </button>
@@ -78,14 +80,14 @@ export function TachesView() {
           <button
             type="button"
             onClick={() => setMasquerFaites(!masquerFaites)}
-            className={`min-h-11 shrink-0 rounded-full px-4 text-sm ${masquerFaites ? 'bg-slate-700 text-white' : 'bg-white text-slate-500 shadow-sm dark:bg-slate-900'}`}
+            className={`${dense ? 'min-h-8 px-3 text-xs' : 'min-h-11 px-4 text-sm'} shrink-0 rounded-full ${masquerFaites ? 'bg-slate-700 text-white' : 'bg-white text-slate-500 shadow-sm dark:bg-slate-900'}`}
           >
             {masquerFaites ? 'Terminées masquées' : 'Masquer terminées'}
           </button>
         </div>
       )}
 
-      {ouverte && (
+      {ouverte && ajoutRapide && (
         <form
           className="flex gap-2"
           onSubmit={(e) => {
@@ -93,7 +95,7 @@ export function TachesView() {
             quickAdd();
           }}
         >
-          <input className="min-w-0 flex-1" placeholder="Nouvelle tâche pour cette intervention…" value={quick} onChange={(e) => setQuick(e.target.value)} aria-label="Ajout rapide d'une tâche" />
+          <input className={`min-w-0 flex-1 ${dense ? '!min-h-10' : ''}`} placeholder="Nouvelle tâche pour cette intervention…" value={quick} onChange={(e) => setQuick(e.target.value)} aria-label="Ajout rapide d'une tâche" />
           <MicButton onResult={(t) => setQuick((v) => (v ? `${v} ${t}` : t.charAt(0).toUpperCase() + t.slice(1)))} />
           <Button type="submit" variant="secondary" icon="plus" aria-label="Créer" className="!px-3" />
         </form>
@@ -103,14 +105,17 @@ export function TachesView() {
 
       {groups.map(([appId, list]) => (
         <section key={appId}>
-          <h2 className="mb-2 flex items-center gap-2 text-sm font-bold tracking-wide text-slate-500 uppercase">
-            <Icon name="home" className="size-4" /> {appById.get(appId)?.nom ?? 'Sans bien'}
-          </h2>
-          <ul className="space-y-2">
+          {groups.length > 1 && (
+            <h2 className="mb-1.5 flex items-center gap-2 text-sm font-bold tracking-wide text-slate-500 uppercase">
+              <Icon name="home" className="size-4" /> {appById.get(appId)?.nom ?? 'Sans bien'}
+            </h2>
+          )}
+          <ul className={dense ? 'space-y-1' : 'space-y-2'}>
             {list.map((t) => (
               <TacheRow
                 key={t.tache.id}
                 info={t}
+                dense={dense}
                 onOpen={() => setEditing(t.tache.id)}
                 onRemove={ouverte ? () => confirm(`Retirer « ${t.tache.titre} » de l'intervention ? Elle reste dans la liste des tâches.`) && removeTacheFromIntervention(interventionId, t.tache.id, data) : null}
               />
@@ -119,16 +124,7 @@ export function TachesView() {
         </section>
       ))}
 
-      {ouverte && (
-        <button
-          type="button"
-          onClick={() => (data.modeles.length ? setChoosing(true) : setEditing('new'))}
-          aria-label="Nouvelle tâche"
-          className="fixed right-4 bottom-24 z-30 flex size-16 items-center justify-center rounded-full bg-sky-600 text-white shadow-lg active:scale-95"
-        >
-          <Icon name="plus" className="size-8" strokeWidth={2.5} />
-        </button>
-      )}
+      {ouverte && <BoutonAjout onClick={() => (data.modeles.length ? setChoosing(true) : setEditing('new'))} label="Nouvelle tâche" />}
 
       {(editing === 'new' || editingTache) && (
         <TacheEditor key={editing} tache={editingTache} defaultAppartementId={filtreActif || bien} interventionId={interventionId} onClose={() => setEditing(null)} onOpen={(id) => setEditing(id)} />
@@ -163,7 +159,7 @@ export function TachesView() {
   );
 }
 
-function TacheRow({ info, onOpen, onRemove }) {
+function TacheRow({ info, onOpen, onRemove, dense }) {
   const { tache, prete, byType } = info;
   const statut = statutTache(tache);
   const fait = statut === 'terminee';
@@ -172,6 +168,36 @@ function TacheRow({ info, onOpen, onRemove }) {
     : prete
       ? 'bg-emerald-50 ring-2 ring-emerald-500/60 dark:bg-emerald-500/10'
       : 'bg-white dark:bg-slate-900';
+  const pastilles = TYPE_ORDER.map((type) => {
+    const list = byType[type] ?? [];
+    if (!list.length) return null;
+    const done = list.filter((x) => x.item.status.complet).length;
+    return (
+      <Pill key={type} ok={done === list.length}>
+        {TYPE_ICON[type]} {TYPES[type]} {done === list.length ? '✓' : `${done}/${list.length}`}
+      </Pill>
+    );
+  });
+  if (dense)
+    return (
+      <li className={`flex items-center gap-2 rounded-xl py-1 pr-1 pl-2.5 shadow-sm ${fait ? 'bg-slate-100 opacity-60 dark:bg-slate-900/50' : 'bg-white dark:bg-slate-900'}`}>
+        <BigCheck compact etat={fait ? 'complet' : 'vide'} label={fait ? 'Remettre à traiter' : 'Marquer terminée'} onClick={() => setStatutTache(tache, fait ? 'a_traiter' : 'terminee')} />
+        <button type="button" className="min-h-11 min-w-0 flex-1 text-left" onClick={onOpen}>
+          <span className={`flex items-center gap-1.5 text-[15px] font-semibold ${fait ? 'line-through' : ''}`}>
+            {!fait && prete && <span className="size-2.5 shrink-0 rounded-full bg-emerald-500" title="Prête" aria-label="Prête" />}
+            <span className="truncate">{tache.titre}</span>
+          </span>
+          {(tache.echeance || statut === 'reportee') && (
+            <span className="block truncate text-xs text-slate-500">
+              {tache.echeance && <span className={enRetard(tache) ? 'font-bold text-red-600' : ''}>📅 {dateCourte(tache.echeance)}</span>}
+              {statut === 'reportee' && <span className="font-semibold text-amber-600"> · {STATUTS_TACHE.reportee}</span>}
+            </span>
+          )}
+          <span className="mt-0.5 hidden flex-wrap gap-1 sm:flex">{pastilles}</span>
+        </button>
+        {onRemove && <Button variant="ghost" icon="x" aria-label={`Retirer ${tache.titre} de l'intervention`} className="!px-2 text-slate-400" onClick={onRemove} />}
+      </li>
+    );
   return (
     <li className={`rounded-2xl p-2 shadow-sm ${tone}`}>
       <div className="flex items-center gap-3">
@@ -181,16 +207,7 @@ function TacheRow({ info, onOpen, onRemove }) {
           <span className="mt-1 flex flex-wrap items-center gap-1">
             {tache.echeance && <span className={`text-xs ${enRetard(tache) ? 'font-bold text-red-600' : 'text-slate-500'}`}>📅 {dateCourte(tache.echeance)}</span>}
             {statut === 'reportee' && <span className="text-xs font-semibold text-amber-600">{STATUTS_TACHE.reportee}</span>}
-            {TYPE_ORDER.map((type) => {
-              const list = byType[type];
-              if (!list.length) return null;
-              const done = list.filter((x) => x.item.status.complet).length;
-              return (
-                <Pill key={type} ok={done === list.length}>
-                  {TYPE_ICON[type]} {TYPES[type]} {done === list.length ? '✓' : `${done}/${list.length}`}
-                </Pill>
-              );
-            })}
+            {pastilles}
             {!fait && prete && <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400">✓ Prête</span>}
           </span>
         </button>

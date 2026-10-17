@@ -6,7 +6,8 @@ import { TYPES, TYPE_ICON, TYPE_ORDER } from '../../shared/schema.js';
 import { Button, Icon, Sheet, Stepper, TextField } from '../components/ui.jsx';
 import { ArticleCreator } from '../components/ArticleCreator.jsx';
 import { saveTache, deleteTache, duplicateTache, saveAsModele, addTachesToIntervention, affecter, propagerModele } from '../actions.js';
-import { listeVoyages, voyageDe, voyageOuvert } from '../../shared/voyages.js';
+import { libellePlanification, listeVoyages, nomIntervention, voyageDe, voyageOuvert } from '../../shared/voyages.js';
+import { refTache } from '../../shared/references.js';
 import { diffModele, tachesDuModele } from '../../shared/modeles.js';
 import { ArticleEditor } from './ArticleEditor.jsx';
 import { ouverteDepuis } from './BacklogView.jsx';
@@ -142,6 +143,7 @@ export function TacheEditor({ tache, modele = !!tache?.modele, defaultAppartemen
         )}
         {tache && !modele && tache.created_at && (
           <p className="text-sm text-slate-500">
+            {tache.ref ? <b className="font-semibold text-slate-600 dark:text-slate-300">{refTache(tache)} · </b> : null}
             Créée le {new Date(tache.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
             {statut !== 'terminee' && ` · ouverte depuis ${ouverteDepuis(tache.created_at)}`}
           </p>
@@ -158,7 +160,7 @@ export function TacheEditor({ tache, modele = !!tache?.modele, defaultAppartemen
                 </option>
               ))}
             </select>
-            {prevue && voyageId === voyageDepart && <span className="mt-1 block text-xs text-slate-500">Intervention : {prevue.nom} ({STATUTS[prevue.statut]})</span>}
+            {prevue && voyageId === voyageDepart && <span className="mt-1 block text-xs text-slate-500">Intervention : {libellePlanification(prevue, data)} ({STATUTS[prevue.statut]})</span>}
           </label>
         )}
         {!modele && (
@@ -209,11 +211,14 @@ export function TacheEditor({ tache, modele = !!tache?.modele, defaultAppartemen
             <NouveauCommentaire tacheId={tache.id} />
             <ListeCommentaires
               commentaires={commentairesTache(tache.id, data)}
-              titreDe={(c) => (c.intervention_id ? data.deplacements.find((d) => d.id === c.intervention_id)?.nom : null)}
+              titreDe={(c) => {
+                const i = c.intervention_id && data.deplacements.find((d) => d.id === c.intervention_id);
+                return i ? nomIntervention(i, data) : null;
+              }}
             />
           </section>
         )}
-        {historique.length > 0 && <p className="text-sm text-slate-500">Interventions passées : {historique.map((d) => d.nom).join(', ')}</p>}
+        {historique.length > 0 && <p className="text-sm text-slate-500">Interventions passées : {historique.map((d) => nomIntervention(d, data)).join(', ')}</p>}
 
         {message && <p className="rounded-xl bg-emerald-100 p-3 text-emerald-900 dark:bg-emerald-500/20 dark:text-emerald-200">{message}</p>}
 
@@ -327,14 +332,15 @@ function ArticlePicker({ links, setLinks }) {
     if (!q.trim()) return [];
     const direct = data.articles.filter((a) => matchesSearch(a.nom, q));
     const fuzzy = findSimilar(q, data.articles, 5).map((m) => m.article);
-    return [...new Set([...direct, ...fuzzy])].filter((a) => !linked.has(a.id)).slice(0, 8);
-  }, [q, data.articles, links]); // eslint-disable-line react-hooks/exhaustive-deps
+    return [...new Set([...direct, ...fuzzy])].slice(0, 10);
+  }, [q, data.articles]);
   const exact = q.trim() && findSameName(q, data.articles);
 
-  const add = (id) => {
+  // La liste de résultats reste ouverte après un ajout (on peut en ajouter plusieurs à la suite).
+  const add = (id, { fermer = false } = {}) => {
     const already = new Set([...linked, id]);
     setLinks((ls) => (ls.some((l) => l.article_id === id) ? ls : [...ls, { article_id: id, quantite: 1 }]));
-    setQ('');
+    if (fermer) setQ('');
     setCreating(false);
     // Accessoires à proposer (pré-cochés)
     const acc = accessoiresFor(id, data, already);
@@ -373,7 +379,10 @@ function ArticlePicker({ links, setLinks }) {
               {byType[type].map(({ link: l, article: a }) => (
                 <li key={l.article_id} className="flex items-center gap-2 p-2">
                   <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setFiche(a)} aria-label={`Modifier ${a.nom} dans le catalogue`}>
-                    <span className="block font-medium break-words text-sky-800 underline decoration-dotted underline-offset-4 dark:text-sky-300">{a.nom}</span>
+                    <span className="block font-medium break-words text-sky-800 underline decoration-dotted underline-offset-4 dark:text-sky-300">
+                      {a.a_acheter && <span title="À acheter">🛒 </span>}
+                      {a.nom}
+                    </span>
                     <span className="text-xs text-slate-500">
                       📍 {data.lieux.find((x) => x.id === a.lieu_id)?.nom ?? 'lieu ?'}
                       {a.unite ? ` · en ${a.unite}` : ''}
@@ -432,9 +441,17 @@ function ArticlePicker({ links, setLinks }) {
         <ul className="space-y-1">
           {results.map((a) => (
             <li key={a.id}>
-              <button type="button" onClick={() => add(a.id)} className="flex min-h-12 w-full items-center gap-2 rounded-xl bg-white px-3 text-left active:bg-sky-100 dark:bg-slate-900 dark:active:bg-sky-900">
-                <Icon name="plus" className="size-5 text-sky-600" />
-                <span className="flex-1 font-medium">{a.nom}</span>
+              <button
+                type="button"
+                disabled={linked.has(a.id)}
+                onClick={() => add(a.id)}
+                className={`flex min-h-12 w-full items-center gap-2 rounded-xl px-3 text-left ${linked.has(a.id) ? 'bg-emerald-50 text-slate-500 dark:bg-emerald-500/10' : 'bg-white active:bg-sky-100 dark:bg-slate-900 dark:active:bg-sky-900'}`}
+              >
+                {linked.has(a.id) ? <Icon name="check" className="size-5 text-emerald-600" /> : <Icon name="plus" className="size-5 text-sky-600" />}
+                <span className="flex-1 font-medium">
+                  {a.a_acheter && '🛒 '}
+                  {a.nom}
+                </span>
                 <span className="text-xs text-slate-500">
                   {TYPE_ICON[a.type]} {data.lieux.find((l) => l.id === a.lieu_id)?.nom ?? ''}
                 </span>
@@ -448,6 +465,11 @@ function ArticlePicker({ links, setLinks }) {
               </button>
             </li>
           )}
+          <li>
+            <button type="button" className="min-h-10 w-full text-center text-sm font-medium text-slate-500" onClick={() => setQ('')}>
+              Fermer la liste
+            </button>
+          </li>
         </ul>
       )}
 
@@ -457,8 +479,8 @@ function ArticlePicker({ links, setLinks }) {
           articles={data.articles}
           lieux={data.lieux}
           categories={data.categories}
-          onUseExisting={add}
-          onCreated={add}
+          onUseExisting={(id) => add(id, { fermer: true })}
+          onCreated={(id) => add(id, { fermer: true })}
           onCancel={() => setCreating(false)}
         />
       )}

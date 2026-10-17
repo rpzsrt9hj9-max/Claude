@@ -10,6 +10,12 @@ import {
   listeVoyages, interventionsDuVoyage, tachesVoyage, statutVoyage, nomIntervention, bienIntervention, voyageDe,
 } from '../../shared/voyages.js';
 import { Button, Empty, Icon, Sheet, TextField } from '../components/ui.jsx';
+import { CLASSEMENTS_INTERVENTIONS, classerInterventions } from '../../shared/classement.js';
+import { lignesDescription } from '../../shared/interventions.js';
+import { refIntervention, refTache, refVoyage } from '../../shared/references.js';
+import { useReglages } from '../reglages.js';
+import { AAcheterView } from './AAcheterView.jsx';
+import { dateCourte } from './BacklogView.jsx';
 import { CommentaireItem, ListeCommentaires, NouveauCommentaire, Photo, dateHeure } from '../components/Commentaires.jsx';
 import { TachesView } from './TachesView.jsx';
 import { ArticlesView } from './ArticlesView.jsx';
@@ -24,12 +30,14 @@ const COULEUR_STATUT = {
   en_cours: 'bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300',
   termine: 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
 };
+const TEXTE_STATUT = { en_preparation: 'text-sky-700 dark:text-sky-400', en_cours: 'font-semibold text-amber-700 dark:text-amber-400', termine: 'text-emerald-700 dark:text-emerald-400' };
 const LIBELLE_VOYAGE = { en_preparation: 'En préparation', en_cours: 'En cours', termine: 'Terminé' };
 export const BadgeStatut = ({ statut, voyage }) => (
   <span className={`shrink-0 rounded-full px-2 py-1 text-xs font-bold ${COULEUR_STATUT[statut] ?? ''}`}>{(voyage ? LIBELLE_VOYAGE : STATUTS)[statut] ?? statut}</span>
 );
 
-function Onglets({ onglets, valeur, onChange, badges = {} }) {
+function Onglets({ onglets, valeur, onChange, badges = {}, alertes = {} }) {
+  const { dense } = useReglages();
   return (
     <div className="-mx-4 flex gap-1 overflow-x-auto px-4 pb-1">
       {onglets.map(([id, label]) => (
@@ -38,10 +46,10 @@ function Onglets({ onglets, valeur, onChange, badges = {} }) {
           type="button"
           onClick={() => onChange(id)}
           aria-current={valeur === id ? 'page' : undefined}
-          className={`min-h-11 shrink-0 rounded-full px-4 font-medium ${valeur === id ? 'bg-sky-600 text-white' : 'bg-white text-slate-700 shadow-sm dark:bg-slate-900 dark:text-slate-300'}`}
+          className={`${dense ? 'min-h-9 px-3 text-sm' : 'min-h-11 px-4'} shrink-0 rounded-full font-medium ${valeur === id ? 'bg-sky-600 text-white' : 'bg-white text-slate-700 shadow-sm dark:bg-slate-900 dark:text-slate-300'}`}
         >
           {label}
-          {badges[id] > 0 && <span className="ml-1 rounded-full bg-amber-500 px-1.5 text-[11px] font-bold text-white">{badges[id]}</span>}
+          {badges[id] > 0 && <span className={`ml-1 rounded-full px-1.5 text-[11px] font-bold text-white ${alertes[id] ? 'bg-red-600' : 'bg-amber-500'}`}>{badges[id]}</span>}
         </button>
       ))}
     </div>
@@ -58,53 +66,102 @@ export function DeplacementsView({ voyageId, setVoyageId, interventionId, setInt
   return <VoyageDetail voyage={voyage} onBack={() => setVoyageId(null)} onOpen={setInterventionId} />;
 }
 
-/** Onglet Interventions : toutes les interventions (un bien chacune), tous déplacements confondus. */
+/** Carte compacte d'une intervention : « Bien · nom », référence, date, crayon pour renommer. */
+function CarteIntervention({ i, voyage, onOpen, onEdit, detail }) {
+  const { data } = useData();
+  const { dense } = useReglages();
+  return (
+    <li className="flex items-center rounded-xl bg-white shadow-sm dark:bg-slate-900">
+      <button type="button" onClick={onOpen} className={`flex min-w-0 flex-1 items-center gap-2.5 text-left active:bg-slate-100 dark:active:bg-slate-800 ${dense ? 'min-h-12 py-1 pl-3' : 'min-h-14 py-2 pl-3'}`}>
+        <Icon name="home" className="size-5 shrink-0 text-sky-600" />
+        <span className="min-w-0 flex-1">
+          <span className="flex items-baseline gap-1.5">
+            <span className={`truncate font-semibold ${dense ? '' : 'text-lg'}`}>{nomIntervention(i, data)}</span>
+            {i.ref ? <span className="shrink-0 text-[11px] text-slate-400">{refIntervention(i)}</span> : null}
+          </span>
+          <span className="block truncate text-xs text-slate-500">
+            <span className={TEXTE_STATUT[i.statut]}>{STATUTS[i.statut]}</span> · {i.date_debut ? dateCourte(i.date_debut) : 'Date à fixer'}
+            {voyage && !voyage.virtuel ? ` · 🚐 ${voyage.nom}` : ''}
+            {detail ? ` · ${detail}` : ''}
+          </span>
+        </span>
+      </button>
+      <Button variant="ghost" icon="edit" className="!px-2.5 text-slate-400" aria-label={`Renommer ${nomIntervention(i, data)}`} onClick={onEdit} />
+    </li>
+  );
+}
+
+const resumeTaches = (i, data, tousLiens) => {
+  const ts = tachesIntervention(i.id, data, tousLiens);
+  const faites = ts.filter((t) => statutTache(t) === 'terminee').length;
+  return `${faites}/${ts.length} tâche${ts.length > 1 ? 's' : ''}`;
+};
+
+/** Onglet Interventions : toutes les interventions (un bien chacune), classées par bien ou par déplacement. */
 export function InterventionsView({ interventionId, setInterventionId }) {
   const { data } = useData();
+  const { dense } = useReglages();
   const [voirClos, setVoirClos] = useState(false);
+  const [classement, setClassement] = useLocalState('classement-interventions', 'bien');
+  const [edition, setEdition] = useState(null);
+  const tousLiens = useMemo(() => liens(data), [data]);
   const voyages = listeVoyages(data);
   const voyageDeI = (i) => voyages.find((v) => v.id === voyageDe(i, data));
   const ouverte = data.deplacements.find((d) => d.id === interventionId);
   if (ouverte && voyageDeI(ouverte)) return <InterventionDetail voyage={voyageDeI(ouverte)} dep={ouverte} onBack={() => setInterventionId(null)} />;
 
-  const parDate = (a, b) => (a.date_debut || '9999').localeCompare(b.date_debut || '9999') || nomIntervention(a, data).localeCompare(nomIntervention(b, data), 'fr');
-  const ouvertes = data.deplacements.filter((d) => d.statut !== 'termine').sort(parDate);
-  const closes = data.deplacements.filter((d) => d.statut === 'termine').sort((a, b) => -parDate(a, b));
-  const carte = (i) => {
-    const ts = tachesIntervention(i.id, data);
-    const faites = ts.filter((t) => statutTache(t) === 'terminee').length;
-    return (
-      <li key={i.id}>
-        <button type="button" onClick={() => setInterventionId(i.id)} className="flex w-full items-center gap-3 rounded-2xl bg-white p-3 text-left shadow-sm active:bg-slate-100 dark:bg-slate-900 dark:active:bg-slate-800">
-          <Icon name="home" className="size-7 shrink-0 text-sky-600" />
-          <span className="min-w-0 flex-1">
-            <span className="flex items-start justify-between gap-2">
-              <span className="text-lg font-semibold break-words">{nomIntervention(i, data)}</span>
-              <BadgeStatut statut={i.statut} />
-            </span>
-            <span className="block text-sm text-slate-500 first-letter:uppercase">{dateLongue(i.date_debut)}</span>
-            <span className="block text-sm text-slate-500">
-              🚐 {voyageDeI(i)?.nom ?? '—'} · {ts.length} tâche{ts.length > 1 ? 's' : ''} · {faites} terminée{faites > 1 ? 's' : ''}
-            </span>
-          </span>
-          <Icon name="chevron" className="size-5 shrink-0 text-slate-400" />
-        </button>
-      </li>
-    );
+  const ctx = {
+    bien: (i) => data.appartements.find((a) => a.id === bienIntervention(i, data)) ?? null,
+    voyage: (i) => {
+      const v = voyageDeI(i);
+      return v && !v.virtuel ? v : null;
+    },
   };
+  const ouvertes = data.deplacements.filter((d) => d.statut !== 'termine');
+  const closes = data.deplacements.filter((d) => d.statut === 'termine');
+  const liste = (its, sens = 1) =>
+    classerInterventions(its, classement, ctx).map((g) => (
+      <section key={g.id || 'aucun'}>
+        <h2 className="mb-1 text-sm font-bold tracking-wide text-slate-500 uppercase">
+          {classement === 'deplacement' ? '🚐' : '🏠'} {g.titre} <span className="font-normal">({g.items.length})</span>
+        </h2>
+        <ul className={dense ? 'space-y-1' : 'space-y-2'}>
+          {(sens < 0 ? [...g.items].reverse() : g.items).map((i) => (
+            <CarteIntervention
+              key={i.id}
+              i={i}
+              voyage={classement === 'bien' ? voyageDeI(i) : null}
+              detail={resumeTaches(i, data, tousLiens)}
+              onOpen={() => setInterventionId(i.id)}
+              onEdit={() => setEdition(i)}
+            />
+          ))}
+        </ul>
+      </section>
+    ));
   return (
-    <div className="space-y-4">
-      <p className="text-sm text-slate-500">Une intervention = un bien. Pour en créer, crée un déplacement (onglet Déplacements) et choisis ses tâches.</p>
+    <div className={dense ? 'space-y-2' : 'space-y-3'}>
+      <div className="flex items-center gap-2">
+        <p className="min-w-0 flex-1 text-xs text-slate-500">Une intervention = un bien. On les crée depuis un déplacement.</p>
+        <select className="!min-h-10 w-40 shrink-0 text-sm" value={classement} onChange={(e) => setClassement(e.target.value)} aria-label="Classer les interventions">
+          {CLASSEMENTS_INTERVENTIONS.map(([v, l]) => (
+            <option key={v} value={v}>
+              ↕ {l}
+            </option>
+          ))}
+        </select>
+      </div>
       {ouvertes.length === 0 && <Empty>Aucune intervention en cours.</Empty>}
-      <ul className="space-y-2">{ouvertes.map(carte)}</ul>
+      {liste(ouvertes)}
       {closes.length > 0 && (
         <section className="space-y-2">
           <Button variant="ghost" className="w-full" onClick={() => setVoirClos(!voirClos)}>
             {voirClos ? 'Masquer' : 'Voir'} les interventions terminées ({closes.length})
           </Button>
-          {voirClos && <ul className="space-y-2">{closes.map(carte)}</ul>}
+          {voirClos && liste(closes, -1)}
         </section>
       )}
+      {edition && <ReglagesIntervention dep={edition} onClose={() => setEdition(null)} onDeleted={() => setEdition(null)} />}
     </div>
   );
 }
@@ -115,6 +172,7 @@ function ListeVoyages({ onOpen }) {
   const [voirClos, setVoirClos] = useState(false);
   const tousLiens = useMemo(() => liens(data), [data]);
   const voyages = listeVoyages(data).map((v) => ({ ...v, statut: statutVoyage(v.id, data) }));
+  const { dense } = useReglages();
   const parDate = (a, b) => (a.date_debut || '9999').localeCompare(b.date_debut || '9999');
   const ouverts = voyages.filter((v) => v.statut !== 'termine').sort(parDate);
   const clos = voyages.filter((v) => v.statut === 'termine').sort((a, b) => -parDate(a, b));
@@ -123,19 +181,21 @@ function ListeVoyages({ onOpen }) {
     const its = interventionsDuVoyage(v.id, data);
     return (
       <li key={v.id}>
-        <button type="button" onClick={() => onOpen(v.id)} className="flex w-full items-center gap-3 rounded-2xl bg-white p-3 text-left shadow-sm active:bg-slate-100 dark:bg-slate-900 dark:active:bg-slate-800">
+        <button type="button" onClick={() => onOpen(v.id)} className="flex w-full items-center gap-3 rounded-xl bg-white px-3 py-2 text-left shadow-sm active:bg-slate-100 dark:bg-slate-900 dark:active:bg-slate-800">
           <span className="min-w-0 flex-1">
             <span className="flex items-start justify-between gap-2">
-              <span className="text-lg font-semibold break-words">{v.nom}</span>
+              <span className="min-w-0 font-semibold break-words">
+                {v.nom} {v.ref ? <span className="text-[11px] font-normal text-slate-400">{refVoyage(v)}</span> : null}
+              </span>
               <BadgeStatut statut={v.statut} voyage />
             </span>
-            <span className="block text-sm text-slate-500 first-letter:uppercase">{dateLongue(v.date_debut)}</span>
+            <span className="block text-xs text-slate-500 first-letter:uppercase">{dateLongue(v.date_debut)}</span>
             <span className="mt-1 flex flex-wrap gap-1">
               {its.map((i) => {
                 const ts = tachesIntervention(i.id, data, tousLiens);
                 return (
                   <span key={i.id} className={`rounded-full px-2 py-0.5 text-xs ${i.statut === 'termine' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300' : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'}`}>
-                    🏠 {nomIntervention(i, data)} · {ts.length}
+                    {nomIntervention(i, data)} · {ts.length}
                     {i.statut === 'termine' ? ' ✓' : ''}
                   </span>
                 );
@@ -149,12 +209,12 @@ function ListeVoyages({ onOpen }) {
   };
 
   return (
-    <div className="space-y-4">
-      <Button variant="primary" icon="plus" className="w-full !min-h-14 text-lg" onClick={() => setCreation(true)}>
+    <div className={dense ? 'space-y-2' : 'space-y-3'}>
+      <Button variant="primary" icon="plus" className="w-full" onClick={() => setCreation(true)}>
         Nouveau déplacement
       </Button>
       {ouverts.length === 0 && <Empty>Aucun déplacement prévu. Crée-en un et choisis ses tâches : une intervention est créée pour chaque bien.</Empty>}
-      <ul className="space-y-2">{ouverts.map(carte)}</ul>
+      <ul className={dense ? 'space-y-1' : 'space-y-2'}>{ouverts.map(carte)}</ul>
       {clos.length > 0 && (
         <section className="space-y-2">
           <Button variant="ghost" className="w-full" onClick={() => setVoirClos(!voirClos)}>
@@ -204,74 +264,71 @@ function VoyageDetail({ voyage, onBack, onOpen }) {
   const [onglet, setOnglet] = useLocalState('onglet-voyage', 'interventions');
   const [reglages, setReglages] = useState(false);
   const [ajout, setAjout] = useState(false);
+  const [edition, setEdition] = useState(null);
+  const { dense } = useReglages();
   const statut = statutVoyage(voyage.id, data);
   const its = interventionsDuVoyage(voyage.id, data);
   const trip = useMemo(() => computeTrip(voyage.id, data, tachesVoyage(voyage.id, data)), [voyage.id, data]);
   const dep = useMemo(() => ({ ...voyage, statut }), [voyage, statut]);
   const ctx = useMemo(() => ({ ...parent, dep, depId: voyage.id, trip }), [parent, dep, voyage.id, trip]);
-  const reste = (type) => trip.progress[type].total - trip.progress[type].done;
-  const badges = { materiel: reste('materiel'), outillage: reste('outillage'), consommable: reste('consommable'), charger: trip.items.filter((i) => !i.status.complet).length };
+  const restants = trip.items.filter((i) => !i.status.complet).length;
+  const badges = { prendre: restants, charger: restants, acheter: trip.items.filter((i) => i.article.a_acheter).length };
+  const ongletActif = ['interventions', 'prendre', 'charger', 'acheter'].includes(onglet) ? onglet : 'interventions';
 
   return (
     <DataContext.Provider value={ctx}>
-      <div className="space-y-4">
+      <div className={dense ? 'space-y-2' : 'space-y-3'}>
         <div className="flex items-center gap-2">
           <Button variant="ghost" icon="back" className="!px-2" aria-label="Retour aux déplacements" onClick={onBack} />
           <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setReglages(true)}>
             <span className="block truncate text-xl font-bold">{voyage.nom}</span>
-            <span className="block text-sm text-slate-500 first-letter:uppercase">{dateLongue(voyage.date_debut)}</span>
+            <span className="block text-xs text-slate-500 first-letter:uppercase">
+              {dateLongue(voyage.date_debut)}
+              {voyage.ref ? <span className="whitespace-nowrap"> · {refVoyage(voyage)}</span> : null}
+            </span>
           </button>
           <BadgeStatut statut={statut} voyage />
           <Button variant="ghost" icon="edit" className="!px-2" aria-label="Modifier le déplacement" onClick={() => setReglages(true)} />
         </div>
 
         <Onglets
-          onglets={[['interventions', 'Interventions'], ['materiel', 'Matériel'], ['outillage', 'Outillage'], ['consommable', 'Conso.'], ['charger', 'Charger']]}
-          valeur={onglet}
+          onglets={[['interventions', 'Interventions'], ['prendre', 'À prendre'], ['charger', 'Charger'], ['acheter', '🛒 À acheter']]}
+          valeur={ongletActif}
           onChange={setOnglet}
           badges={badges}
+          alertes={{ acheter: true }}
         />
 
-        {onglet === 'interventions' && (
-          <div className="space-y-3">
+        {ongletActif === 'interventions' && (
+          <div className="space-y-2">
             {statut !== 'termine' && (
-              <Button variant="primary" icon="plus" className="w-full !min-h-14 text-lg" onClick={() => setAjout(true)}>
+              <Button variant="primary" icon="plus" className="w-full" onClick={() => setAjout(true)}>
                 Ajouter des tâches
               </Button>
             )}
             {its.length === 0 && <Empty>Aucune intervention : ajoute des tâches, une intervention sera créée pour chaque bien.</Empty>}
-            <ul className="space-y-2">
+            <ul className={dense ? 'space-y-1' : 'space-y-2'}>
               {its.map((i) => {
                 const ts = tachesIntervention(i.id, data);
                 const faites = ts.filter((t) => statutTache(t) === 'terminee').length;
                 const sortie = computeTrip(cleSortie(i.id), data, ts);
                 const sortis = sortie.items.filter((x) => x.status.complet).length;
                 return (
-                  <li key={i.id}>
-                    <button type="button" onClick={() => onOpen(i.id)} className="flex w-full items-center gap-3 rounded-2xl bg-white p-3 text-left shadow-sm active:bg-slate-100 dark:bg-slate-900 dark:active:bg-slate-800">
-                      <Icon name="home" className="size-7 shrink-0 text-sky-600" />
-                      <span className="min-w-0 flex-1">
-                        <span className="flex items-start justify-between gap-2">
-                          <span className="text-lg font-semibold break-words">{nomIntervention(i, data)}</span>
-                          <BadgeStatut statut={i.statut} />
-                        </span>
-                        <span className="block text-sm text-slate-500">
-                          {ts.length} tâche{ts.length > 1 ? 's' : ''} · {faites} terminée{faites > 1 ? 's' : ''}
-                          {sortie.items.length > 0 && ` · ${sortis}/${sortie.items.length} sortis`}
-                        </span>
-                      </span>
-                      <Icon name="chevron" className="size-5 shrink-0 text-slate-400" />
-                    </button>
-                  </li>
+                  <CarteIntervention
+                    key={i.id}
+                    i={i}
+                    detail={`${faites}/${ts.length} tâche${ts.length > 1 ? 's' : ''}${sortie.items.length ? ` · ${sortis}/${sortie.items.length} sortis` : ''}`}
+                    onOpen={() => onOpen(i.id)}
+                    onEdit={() => setEdition(i)}
+                  />
                 );
               })}
             </ul>
           </div>
         )}
-        {onglet === 'materiel' && <ArticlesView type="materiel" key="m" />}
-        {onglet === 'outillage' && <ArticlesView type="outillage" key="o" />}
-        {onglet === 'consommable' && <ArticlesView type="consommable" key="c" />}
-        {onglet === 'charger' && <ChecklistView />}
+        {ongletActif === 'prendre' && <ArticlesView />}
+        {ongletActif === 'charger' && <ChecklistView />}
+        {ongletActif === 'acheter' && <AAcheterView />}
       </div>
       {ajout && (
         <ChoixTaches
@@ -284,6 +341,7 @@ function VoyageDetail({ voyage, onBack, onOpen }) {
         />
       )}
       {reglages && <ReglagesVoyage voyage={voyage} statut={statut} onClose={() => setReglages(false)} onDeleted={onBack} />}
+      {edition && <ReglagesIntervention dep={edition} onClose={() => setEdition(null)} onDeleted={() => setEdition(null)} />}
       {createPortal(<PrintableList />, document.body)}
     </DataContext.Provider>
   );
@@ -339,7 +397,8 @@ export function InterventionDetail({ voyage, dep, onBack }) {
   const trip = useMemo(() => computeTrip(voyage.id, data, taches), [voyage.id, data, taches]);
   const sortie = useMemo(() => computeTrip(cleSortie(dep.id), data, taches), [dep.id, data, taches]);
   const ctx = useMemo(() => ({ ...parent, dep, depId: voyage.id, interventionId: dep.id, voyage, trip }), [parent, dep, voyage, trip]);
-  const ongletActif = ['taches', 'sortir', 'recap'].includes(onglet) ? onglet : 'taches';
+  const ongletActif = ['taches', 'sortir', 'acheter', 'recap'].includes(onglet) ? onglet : 'taches';
+  const { dense } = useReglages();
 
   useEffect(() => {
     const fin = () => setImpression(false);
@@ -353,21 +412,26 @@ export function InterventionDetail({ voyage, dep, onBack }) {
 
   return (
     <DataContext.Provider value={ctx}>
-      <div className="space-y-4">
-        <div className="flex items-center gap-2">
+      <div className={dense ? 'space-y-2' : 'space-y-3'}>
+        <div className="flex items-center gap-1">
           <Button variant="ghost" icon="back" className="!px-2" aria-label={`Retour à ${voyage.nom}`} onClick={onBack} />
-          <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setReglages(true)}>
-            <span className="block truncate text-xs text-slate-500">{voyage.nom}</span>
-            <span className="block truncate text-xl font-bold">🏠 {nomIntervention(dep, data)}</span>
-            <span className="block text-sm text-slate-500 first-letter:uppercase">{dateLongue(dep.date_debut)}</span>
+          <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setReglages(true)} aria-label="Renommer ou changer la date">
+            {!voyage.virtuel && <span className="block truncate text-xs text-slate-500">🚐 {voyage.nom}</span>}
+            <span className="block truncate text-lg font-bold">🏠 {nomIntervention(dep, data)}</span>
+            <span className="block text-xs text-slate-500 first-letter:uppercase">
+              {dateLongue(dep.date_debut)}
+              {dep.ref ? <span className="whitespace-nowrap"> · {refIntervention(dep)}</span> : null}
+            </span>
           </button>
           <BadgeStatut statut={dep.statut} />
+          <Button variant="ghost" icon="edit" className="!px-2 text-slate-400" aria-label="Renommer l'intervention" onClick={() => setReglages(true)} />
         </div>
         <Onglets
-          onglets={[['taches', 'Tâches'], ['sortir', 'À sortir'], ['recap', 'Récap']]}
+          onglets={[['taches', 'Tâches'], ['sortir', 'À sortir'], ['acheter', '🛒 À acheter'], ['recap', 'Récap']]}
           valeur={ongletActif}
           onChange={setOnglet}
-          badges={{ sortir: sortie.items.filter((i) => !i.status.complet).length }}
+          badges={{ sortir: sortie.items.filter((i) => !i.status.complet).length, acheter: trip.items.filter((i) => i.article.a_acheter).length }}
+          alertes={{ acheter: true }}
         />
         {dep.statut === 'termine' && ongletActif !== 'recap' && <p className="rounded-xl bg-slate-200 p-2 text-center text-sm dark:bg-slate-800">Cette intervention est terminée.</p>}
         {ongletActif === 'taches' && <TachesView />}
@@ -377,6 +441,7 @@ export function InterventionDetail({ voyage, dep, onBack }) {
             <ChecklistView cle={cleSortie(dep.id)} trip={sortie} sortie />
           </div>
         )}
+        {ongletActif === 'acheter' && <AAcheterView />}
         {ongletActif === 'recap' && <RecapView onImprimer={imprimerRapport} />}
       </div>
       {reglages && <ReglagesIntervention dep={dep} onClose={() => setReglages(false)} onDeleted={onBack} />}
@@ -388,8 +453,10 @@ export function InterventionDetail({ voyage, dep, onBack }) {
 function ReglagesIntervention({ dep, onClose, onDeleted }) {
   const { data } = useData();
   const [date, setDate] = useState(dep.date_debut ?? '');
+  const [nom, setNom] = useState(dep.nom_perso ?? '');
+  const bien = data.appartements.find((a) => a.id === bienIntervention(dep, data));
   const save = async () => {
-    await A.updateIntervention(dep.id, { date_debut: date || null });
+    await A.updateIntervention(dep.id, { date_debut: date || null, nom_perso: nom.trim() || null });
     onClose();
   };
   const del = async () => {
@@ -401,6 +468,10 @@ function ReglagesIntervention({ dep, onClose, onDeleted }) {
   return (
     <Sheet title="Modifier l'intervention" onClose={onClose} footer={<Button variant="primary" icon="check" className="w-full text-lg" onClick={save}>Enregistrer</Button>}>
       <div className="space-y-4">
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-400">Nom {bien ? `(affiché « ${bien.nom} · … »)` : ''}</span>
+          <TextField value={nom} onChange={setNom} placeholder="ex. : rotation locataire" aria-label="Nom de l'intervention" />
+        </label>
         <label className="block">
           <span className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-400">Date d'intervention</span>
           <input type="date" className="w-full" value={date} onChange={(e) => setDate(e.target.value)} />
@@ -551,20 +622,36 @@ function RapportImprimable() {
       )}
     </div>
   );
-  const bien = data.appartements.find((a) => a.id === bienIntervention(dep, data))?.nom;
   return (
     <div className="hidden p-4 text-black print:block">
-      <h1 className="text-2xl font-bold">Rapport d'intervention{bien ? ` – ${bien}` : ''}</h1>
+      <h1 className="text-2xl font-bold">Rapport d'intervention – {nomIntervention(dep, data)}</h1>
       <p className="mb-4 text-sm first-letter:uppercase">
-        {dateLongue(dep.date_debut)} · {voyage.nom} · {STATUTS[dep.statut]} · imprimé le {new Date().toLocaleDateString('fr-FR')}
+        {dateLongue(dep.date_debut)}
+        {dep.ref ? ` · ${refIntervention(dep)}` : ''}
+        {voyage.virtuel ? '' : ` · ${voyage.nom}${voyage.ref ? ` (${refVoyage(voyage)})` : ''}`} · {STATUTS[dep.statut]} · imprimé le {new Date().toLocaleDateString('fr-FR')}
       </p>
       <h2 className="mb-1 border-b border-black text-lg font-bold">Tâches</h2>
       <ul className="mb-4">
-        {r.parTache.map(({ tache }) => (
-          <li key={tache.id} className="py-0.5">
-            {resultat(tache) === 'terminee' ? '☑' : '☐'} {tache.titre} – <b>{STATUTS_TACHE[resultat(tache)]}</b>
-          </li>
-        ))}
+        {r.parTache.map(({ tache }) => {
+          const lignes = lignesDescription(tache.description).filter((l) => l.texte.trim());
+          return (
+            <li key={tache.id} className="break-inside-avoid py-1">
+              <p>
+                {resultat(tache) === 'terminee' ? '☑' : '☐'} <b>{tache.titre}</b>
+                {tache.ref ? <span className="text-xs text-gray-600"> {refTache(tache)}</span> : null} – {STATUTS_TACHE[resultat(tache)]}
+              </p>
+              {lignes.length > 0 && (
+                <div className="ml-6 text-sm">
+                  {lignes.map((l) => (
+                    <p key={l.index} className="whitespace-pre-wrap">
+                      {l.type === 'case' ? `${l.fait ? '☑' : '☐'} ${l.texte}` : l.texte}
+                    </p>
+                  ))}
+                </div>
+              )}
+            </li>
+          );
+        })}
       </ul>
       {compteRendu.length > 0 && (
         <>

@@ -8,6 +8,7 @@ import { chargerCatalogue } from '../actions.js';
 
 const ONGLETS = [
   ['outillage', `${TYPE_ICON.outillage} ${TYPES.outillage}`],
+  ['accessoire', `${TYPE_ICON.accessoire} ${TYPES.accessoire}`],
   ['consommable', `${TYPE_ICON.consommable} Conso.`],
   ['materiel', `${TYPE_ICON.materiel} ${TYPES.materiel}`],
   ['modeles', '📋 Tâches types'],
@@ -164,7 +165,7 @@ export function ChoixCatalogue({ catalogue, onValider, libelle = 'Reprendre', en
         </>
       )}
 
-      <div className="sticky bottom-20 pt-2">
+      <div className="sticky bottom-14 pt-2">
         <Button variant="primary" icon="check" className="w-full text-lg shadow-lg" disabled={envoi || (!nbArticles && !modeles.size)} onClick={() => onValider({ articles, modeles })}>
           {libelle} ({nbArticles} article{nbArticles > 1 ? 's' : ''}
           {modeles.size ? `, ${modeles.size} tâche${modeles.size > 1 ? 's' : ''} type${modeles.size > 1 ? 's' : ''}` : ''})
