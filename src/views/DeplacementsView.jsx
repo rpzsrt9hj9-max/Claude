@@ -4,12 +4,15 @@ import { DataContext, useData, useLocalState } from '../data.js';
 import { STATUTS, cleSortie } from '../../shared/schema.js';
 import { computeTrip } from '../../shared/calc.js';
 import {
-  STATUTS_TACHE, STATUT_ORDER, dansRapport, propositionCloture, recap, statutTache, tachesIntervention, liens,
+  STATUTS_TACHE, STATUTS_CLOTURE, dansRapport, propositionCloture, recap, statutTache, tachesIntervention, liens,
 } from '../../shared/interventions.js';
 import {
   listeVoyages, interventionsDuVoyage, tachesVoyage, statutVoyage, nomIntervention, bienIntervention, voyageDe,
 } from '../../shared/voyages.js';
 import { Button, Empty, Icon, Sheet, TextField } from '../components/ui.jsx';
+import { Glissable } from '../components/Glissable.jsx';
+import { BoutonChrono, SuggestionChrono, TempsView } from '../components/Chrono.jsx';
+import { useContexteEcran } from '../chrono.js';
 import { CLASSEMENTS_INTERVENTIONS, classerInterventions } from '../../shared/classement.js';
 import { lignesDescription } from '../../shared/interventions.js';
 import { refIntervention, refTache, refVoyage } from '../../shared/references.js';
@@ -73,7 +76,8 @@ function CarteIntervention({ i, voyage, onOpen, onEdit, detail }) {
   const { data } = useData();
   const { dense } = useReglages();
   return (
-    <li className="flex items-center rounded-xl bg-white shadow-sm dark:bg-slate-900">
+    <Glissable className="rounded-xl shadow-sm" fond="bg-white dark:bg-slate-900" supprimer={() => A.supprimerIntervention(i, data, nomIntervention(i, data))}>
+    <div className="flex items-center">
       <button type="button" onClick={onOpen} className={`flex min-w-0 flex-1 items-center gap-2.5 text-left active:bg-slate-100 dark:active:bg-slate-800 ${dense ? 'min-h-12 py-1 pl-3' : 'min-h-14 py-2 pl-3'}`}>
         <Icon name="home" className="size-5 shrink-0 text-sky-600" />
         <span className="min-w-0 flex-1">
@@ -90,7 +94,8 @@ function CarteIntervention({ i, voyage, onOpen, onEdit, detail }) {
         </span>
       </button>
       <Button variant="ghost" icon="edit" className="!px-2.5 text-slate-400" aria-label={`Renommer ${nomIntervention(i, data)}`} onClick={onEdit} />
-    </li>
+    </div>
+    </Glissable>
   );
 }
 
@@ -183,8 +188,8 @@ function ListeVoyages({ onOpen }) {
   const carte = (v) => {
     const its = interventionsDuVoyage(v.id, data);
     return (
-      <li key={v.id}>
-        <button type="button" onClick={() => onOpen(v.id)} className="flex w-full items-center gap-3 rounded-xl bg-white px-3 py-2 text-left shadow-sm active:bg-slate-100 dark:bg-slate-900 dark:active:bg-slate-800">
+      <Glissable key={v.id} className="rounded-xl shadow-sm" fond="bg-white dark:bg-slate-900" supprimer={() => A.supprimerVoyage(v, data)}>
+        <button type="button" onClick={() => onOpen(v.id)} className="flex w-full items-center gap-3 px-3 py-2 text-left active:bg-slate-100 dark:active:bg-slate-800">
           <span className="min-w-0 flex-1">
             <span className="flex items-start justify-between gap-2">
               <span className="min-w-0 font-semibold break-words">
@@ -207,7 +212,7 @@ function ListeVoyages({ onOpen }) {
           </span>
           <Icon name="chevron" className="size-5 shrink-0 text-slate-400" />
         </button>
-      </li>
+      </Glissable>
     );
   };
 
@@ -271,12 +276,15 @@ function VoyageDetail({ voyage, onBack, onOpen }) {
   const { dense } = useReglages();
   const statut = statutVoyage(voyage.id, data);
   const its = interventionsDuVoyage(voyage.id, data);
-  const trip = useMemo(() => computeTrip(voyage.id, data, tachesVoyage(voyage.id, data)), [voyage.id, data]);
+  const trip = useMemo(() => computeTrip(voyage.id, data, tachesVoyage(voyage.id, data), (data.voyage_articles || []).filter((v) => v.voyage_id === voyage.id)), [voyage.id, data]);
   const dep = useMemo(() => ({ ...voyage, statut }), [voyage, statut]);
   const ctx = useMemo(() => ({ ...parent, dep, depId: voyage.id, trip }), [parent, dep, voyage.id, trip]);
   const restants = trip.items.filter((i) => !i.status.complet).length;
   const badges = { prendre: restants, charger: restants, acheter: trip.items.filter((i) => i.article.a_acheter).length };
-  const ongletActif = ['interventions', 'prendre', 'charger', 'acheter'].includes(onglet) ? onglet : 'interventions';
+  const ongletActif = ['interventions', 'prendre', 'charger', 'acheter', 'temps'].includes(onglet) ? onglet : 'interventions';
+  useContexteEcran(1, { voyage_id: voyage.id, ecran: ongletActif });
+  const ctxChrono = { voyage_id: voyage.id };
+  const tachesDuVoyage = trip.taches.map((t) => t.tache);
 
   return (
     <DataContext.Provider value={ctx}>
@@ -291,11 +299,12 @@ function VoyageDetail({ voyage, onBack, onOpen }) {
             </span>
           </button>
           <BadgeStatut statut={statut} voyage />
+          <BoutonChrono ctx={ctxChrono} taches={tachesDuVoyage} />
           <Button variant="ghost" icon="edit" className="!px-2" aria-label="Modifier le déplacement" onClick={() => setReglages(true)} />
         </div>
 
         <Onglets
-          onglets={[['interventions', 'Interventions'], ['prendre', 'À prendre'], ['charger', 'Charger'], ['acheter', '🛒 À acheter']]}
+          onglets={[['interventions', 'Interventions'], ['prendre', 'À prendre'], ['charger', 'Charger'], ['acheter', '🛒 À acheter'], ['temps', '⏱ Temps']]}
           valeur={ongletActif}
           onChange={setOnglet}
           badges={badges}
@@ -329,9 +338,12 @@ function VoyageDetail({ voyage, onBack, onOpen }) {
             </ul>
           </div>
         )}
+        {(ongletActif === 'prendre' || ongletActif === 'charger') && <SuggestionChrono activite="preparation" ctx={ctxChrono} />}
+        {ongletActif === 'acheter' && <SuggestionChrono activite="achats" ctx={ctxChrono} />}
         {ongletActif === 'prendre' && <ArticlesView />}
         {ongletActif === 'charger' && <ChecklistView />}
         {ongletActif === 'acheter' && <AAcheterView />}
+        {ongletActif === 'temps' && <TempsView voyage={voyage} interventions={its.map((i) => ({ ...i, nomAffiche: nomIntervention(i, data) }))} taches={tachesDuVoyage} />}
       </div>
       {ajout && (
         <ChoixTaches
@@ -394,9 +406,11 @@ export function InterventionDetail({ voyage, dep, onBack }) {
   // « Prête » = tout ce qu'il faut est chargé dans la voiture (cases « Pris » du déplacement).
   const trip = useMemo(() => computeTrip(voyage.id, data, taches), [voyage.id, data, taches]);
   const sortie = useMemo(() => computeTrip(cleSortie(dep.id), data, taches), [dep.id, data, taches]);
-  const ctx = useMemo(() => ({ ...parent, dep, depId: voyage.id, interventionId: dep.id, voyage, trip }), [parent, dep, voyage, trip]);
+  const ctx = useMemo(() => ({ ...parent, dep, depId: voyage.id, interventionId: dep.id, voyage, trip, ctxChrono: { voyage_id: voyage.id, intervention_id: dep.id, appartement_id: bienIntervention(dep, parent.data) } }), [parent, dep, voyage, trip]);
   const ongletActif = ['taches', 'sortir', 'acheter', 'recap'].includes(onglet) ? onglet : 'taches';
   const { dense } = useReglages();
+  const ctxChrono = { voyage_id: voyage.id, intervention_id: dep.id, appartement_id: bienIntervention(dep, data) };
+  useContexteEcran(2, { ...ctxChrono, ecran: ongletActif === 'sortir' ? 'sortir' : ongletActif });
 
   useEffect(() => {
     const fin = () => setImpression(false);
@@ -422,6 +436,7 @@ export function InterventionDetail({ voyage, dep, onBack }) {
             </span>
           </button>
           <BadgeStatut statut={dep.statut} />
+          <BoutonChrono ctx={ctxChrono} taches={taches} />
           <Button variant="ghost" icon="edit" className="!px-2 text-slate-400" aria-label="Renommer l'intervention" onClick={() => setReglages(true)} />
         </div>
         <Onglets
@@ -435,8 +450,8 @@ export function InterventionDetail({ voyage, dep, onBack }) {
         {ongletActif === 'taches' && <TachesView />}
         {ongletActif === 'sortir' && (
           <div className="space-y-3">
-            <p className="text-sm text-slate-600 dark:text-slate-400">Ce qu'il faut sortir de la voiture pour les tâches de ce bien.</p>
-            <ChecklistView cle={cleSortie(dep.id)} trip={sortie} sortie />
+            <p className="text-sm text-slate-600 dark:text-slate-400">Ce qu'il faut sortir de la voiture pour ce bien. <span className="rounded bg-sky-100 px-1 dark:bg-sky-950">Bleu</span> : dans la voiture ; <span className="rounded bg-slate-200 px-1 dark:bg-slate-800">gris</span> : pas chargé.</p>
+            <ChecklistView cle={cleSortie(dep.id)} trip={sortie} sortie charges={new Set(trip.items.filter((i) => i.status.taken > 0 || i.status.etat !== 'vide').map((i) => i.article.id))} />
           </div>
         )}
         {ongletActif === 'acheter' && <AAcheterView />}
@@ -577,7 +592,7 @@ function Cloture({ onClose }) {
                 <li key={c.tache.id} className="space-y-2 rounded-2xl bg-white p-3 shadow-sm dark:bg-slate-900">
                   <p className="font-semibold break-words">{c.tache.titre}</p>
                   <div className="grid grid-cols-3 gap-1 rounded-xl bg-slate-200 p-1 dark:bg-slate-800">
-                    {STATUT_ORDER.map((s) => (
+                    {STATUTS_CLOTURE.map((s) => (
                       <button
                         key={s}
                         type="button"

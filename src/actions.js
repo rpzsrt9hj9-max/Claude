@@ -1,7 +1,7 @@
 // Actions métier côté client (écritures locales, synchronisées ensuite).
 import { avecAnnulation } from './annulation.js';
 import { db, insert, update, remove, write } from './db.js';
-import { priseId, tacheArticleId, accessoireId, defaultCumul, uuid, cleKit } from '../shared/schema.js';
+import { priseId, tacheArticleId, accessoireId, defaultCumul, uuid, cleKit, cleSortie, voyageArticleId, kitContenuId } from '../shared/schema.js';
 import { findSameName } from '../shared/match.js';
 import { mergeArticles, duplicateTrip, copyTache } from '../shared/ops.js';
 import { ajouterTaches, retirerTache, cloturer, planification, decocherTout } from '../shared/interventions.js';
@@ -94,6 +94,31 @@ export async function createArticle({ nom, type, lieu_id = null, categorie_id = 
 /** Modification groupée : même catégorie ou même type pour plusieurs articles. */
 export const bulkUpdateArticles = (ids, patch) => write([...ids].map((id) => ({ table: 'articles', row: { id, ...patch } })));
 
+// ---------- Affaires du déplacement (sans tâche) et basiques ----------
+
+/** Ajoute une affaire à prendre liée au déplacement lui-même (lunettes de soleil…). */
+export const ajouterAuVoyage = (voyageId, articleId, quantite = 1) =>
+  write({ table: 'voyage_articles', row: { id: voyageArticleId(voyageId, articleId), voyage_id: voyageId, article_id: articleId, quantite, deleted: false } });
+
+/** Rattache une affaire du déplacement à une tâche (et éventuellement à sa tâche type). */
+export async function lierATache(voyageId, item, tache, data, aussiModele = false) {
+  const q = item.usages.find((u) => u.voyage)?.quantite ?? 1;
+  const writes = [
+    { table: 'voyage_articles', row: { id: voyageArticleId(voyageId, item.article.id), deleted: true } },
+    { table: 'tache_articles', row: { id: tacheArticleId(tache.id, item.article.id), tache_id: tache.id, article_id: item.article.id, quantite: q, deleted: false } },
+  ];
+  if (aussiModele && tache.modele_id) writes.push({ table: 'tache_articles', row: { id: tacheArticleId(tache.modele_id, item.article.id), tache_id: tache.modele_id, article_id: item.article.id, quantite: q, deleted: false } });
+  await write(writes);
+}
+
+/** Contenu d'un basique (kit) : ajouter, changer la quantité, retirer. */
+export const setContenuKit = (kitId, articleId, quantite) =>
+  write({ table: 'kit_contenus', row: { id: kitContenuId(kitId, articleId), kit_id: kitId, article_id: articleId, quantite, deleted: false } });
+export const retirerContenuKit = (kitId, articleId) => write({ table: 'kit_contenus', row: { id: kitContenuId(kitId, articleId), deleted: true } });
+
+/** Retire un article de la liste d'achats (annulable). */
+export const plusAAcheter = (article) => avecAnnulation(marquerAAcheter([article.id], false), `« ${article.nom} » retiré des achats`);
+
 // ---------- Achats, rangement et stock ----------
 
 export const acheter = (ids, data) => write(marquerAchete([...ids], data, espaceId()));
@@ -139,6 +164,20 @@ export async function saveAsModele(draft, links) {
   return id;
 }
 
+/** Remplace le contenu d'une tâche type existante (description et articles) par celui d'une tâche. */
+export async function remplacerModele(modele, draft, links, data) {
+  const voulus = new Map(links.map((l) => [l.article_id, l.quantite]));
+  const actuels = data.tache_articles.filter((l) => l.tache_id === modele.id);
+  await write([
+    { table: 'taches', row: { id: modele.id, description: decocherTout(draft.description) } },
+    ...actuels.filter((l) => !voulus.has(l.article_id)).map((l) => ({ table: 'tache_articles', row: { id: l.id, deleted: true } })),
+    ...[...voulus].map(([article_id, quantite]) => {
+      const ex = actuels.find((l) => l.article_id === article_id);
+      return { table: 'tache_articles', row: { id: ex?.id ?? tacheArticleId(modele.id, article_id), tache_id: modele.id, article_id, quantite, deleted: false } };
+    }),
+  ]);
+}
+
 /** Crée une tâche à partir d'une tâche type (et l'ajoute à l'intervention si elle est donnée). */
 export async function createFromModele(modele, data, interventionId, appartement_id, ordre) {
   const links = data.tache_articles.filter((l) => l.tache_id === modele.id);
@@ -177,11 +216,20 @@ export async function updateVoyage(voyage, { nom, date_debut }, data) {
   await write(writes);
 }
 
+/** Caisses fusionnées d'un déplacement (texte JSON). */
+export const setCaissesVoyage = (voyage, fusions) => write({ table: 'voyages', row: { id: voyage.id, caisses: JSON.stringify(fusions) } });
+
 /** Supprime un déplacement et ses interventions ; les tâches restent dans la liste générale. */
-export async function deleteVoyage(voyage, data) {
-  for (const i of interventionsDuVoyage(voyage.id, data)) await deleteIntervention(i, data);
-  if (!voyage.virtuel) await remove('voyages', voyage.id);
-}
+const ecrituresSuppressionVoyage = (voyage, data) => [
+  ...interventionsDuVoyage(voyage.id, data).flatMap((i) => ecrituresSuppressionIntervention(i, data)),
+  ...data.prise_articles.filter((p) => p.deplacement_id === voyage.id).map((p) => ({ table: 'prise_articles', row: { id: p.id, deleted: true } })),
+  ...(data.voyage_articles || []).filter((v) => v.voyage_id === voyage.id).map((v) => ({ table: 'voyage_articles', row: { id: v.id, deleted: true } })),
+  ...(voyage.virtuel ? [] : [{ table: 'voyages', row: { id: voyage.id, deleted: true } }]),
+];
+
+export const deleteVoyage = (voyage, data) => write(ecrituresSuppressionVoyage(voyage, data));
+/** Suppression d'un déplacement par glissement, annulable (les tâches restent dans la liste). */
+export const supprimerVoyage = (voyage, data) => avecAnnulation(ecrituresSuppressionVoyage(voyage, data), `Déplacement « ${voyage.nom} » supprimé`);
 
 /** Démarre (ou remet en préparation) toutes les interventions ouvertes d'un déplacement. */
 
@@ -199,14 +247,16 @@ export const retirerTacheAnnulable = (interventionId, tache, data) => avecAnnula
 export const closeIntervention = (interventionId, choix, data) => write(cloturer(interventionId, choix, data));
 
 /** Supprime une intervention : ses liens et cases « Pris » ; les tâches restent dans la liste générale. */
-export async function deleteIntervention(dep, data) {
-  await write([
-    ...data.intervention_taches.filter((l) => l.intervention_id === dep.id).map((l) => ({ table: 'intervention_taches', row: { id: l.id, deleted: true } })),
-    ...data.taches.filter((t) => t.deplacement_id === dep.id).map((t) => ({ table: 'taches', row: { id: t.id, deplacement_id: null } })),
-    ...data.prise_articles.filter((p) => p.deplacement_id === dep.id).map((p) => ({ table: 'prise_articles', row: { id: p.id, deleted: true } })),
-    { table: 'deplacements', row: { id: dep.id, deleted: true } },
-  ]);
-}
+const ecrituresSuppressionIntervention = (dep, data) => [
+  ...data.intervention_taches.filter((l) => l.intervention_id === dep.id).map((l) => ({ table: 'intervention_taches', row: { id: l.id, deleted: true } })),
+  ...data.taches.filter((t) => t.deplacement_id === dep.id).map((t) => ({ table: 'taches', row: { id: t.id, deplacement_id: null } })),
+  ...data.prise_articles.filter((p) => p.deplacement_id === dep.id || p.deplacement_id === cleSortie(dep.id)).map((p) => ({ table: 'prise_articles', row: { id: p.id, deleted: true } })),
+  { table: 'deplacements', row: { id: dep.id, deleted: true } },
+];
+
+export const deleteIntervention = (dep, data) => write(ecrituresSuppressionIntervention(dep, data));
+/** Suppression d'une intervention par glissement, annulable (les tâches restent dans la liste). */
+export const supprimerIntervention = (dep, data, nom) => avecAnnulation(ecrituresSuppressionIntervention(dep, data), `Intervention « ${nom} » supprimée`);
 
 // ---------- Commentaires et photos ----------
 
@@ -248,6 +298,8 @@ function ecrituresSuppressionArticle(article, data) {
     { table: 'articles', row: { id: article.id, deleted: true } },
     ...links.map((l) => ({ table: 'tache_articles', row: { id: l.id, deleted: true } })),
     ...prises.map((p) => ({ table: 'prise_articles', row: { id: p.id, deleted: true } })),
+    ...(data.kit_contenus || []).filter((k) => k.kit_id === article.id || k.article_id === article.id).map((k) => ({ table: 'kit_contenus', row: { id: k.id, deleted: true } })),
+    ...(data.voyage_articles || []).filter((v) => v.article_id === article.id).map((v) => ({ table: 'voyage_articles', row: { id: v.id, deleted: true } })),
   ];
 }
 

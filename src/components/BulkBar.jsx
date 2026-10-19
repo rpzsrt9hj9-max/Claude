@@ -33,7 +33,7 @@ export function BulkBar({ selection, onDone, onAll }) {
   };
 
   return (
-    <div className="safe-bottom fixed inset-x-0 bottom-12 z-40 border-t-2 border-sky-500 bg-white p-2 shadow-2xl dark:bg-slate-900">
+    <div className="safe-bottom fixed inset-x-0 bottom-[var(--bas)] z-40 border-t-2 border-sky-500 bg-white p-2 shadow-2xl dark:bg-slate-900">
       <div className="mx-auto max-w-2xl space-y-2">
         <div className="flex items-center justify-between">
           <span className="font-bold">{n} sélectionné(s)</span>

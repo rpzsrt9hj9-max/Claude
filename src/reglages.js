@@ -9,6 +9,10 @@ const DEFAUTS = {
   // Options développeur
   bloquerPrisSiAAcheter: true, // dans « Charger », un article à acheter ne se coche « pris » qu'après achat
   filtresVisibles: false, // catalogue : filtres toujours affichés (sinon derrière le bouton « Filtres »)
+  boutonAchat: true, // bouton 🛒 sur chaque ligne d'article (À prendre, Charger, À sortir)
+  achatDansLieu: true, // option « 🛒 À acheter » en tête de la liste des lieux
+  chronoDemarrage: 'suggestions', // suivi du temps : 'suggestions' (un toucher + suggestions) | 'auto' (selon l'écran) | 'manuel'
+  chronoInterface: 'bandeau', // 'bandeau' (bandeau + boutons en contexte) | 'onglet' (tout dans l'onglet Temps)
 };
 
 function lire() {

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { SuiviTemps } from './SuiviTemps.jsx';
 import { SheetView } from './SheetView.jsx';
 import { Glissable } from '../components/Glissable.jsx';
 import { useData, useLocalState } from '../data.js';
@@ -66,6 +67,7 @@ export function PlusView({ theme, setTheme }) {
     ...(admin && !observation ? [['famille', 'Famille et retours', 'users']] : []),
     ...PAGES,
     ...(!admin && !observation ? [['importer', 'Reprendre du catalogue partagé', 'download']] : []),
+    ['temps', 'Suivi du temps', 'calendar'],
     ...(!observation && !DEMO ? [['sheet', 'Google Sheet du catalogue', 'share']] : []),
     ...(!observation ? [['retour', 'Envoyer un retour', 'send']] : []),
     ['nouveautes', `Nouveautés (${VERSION})`, 'calendar'],
@@ -88,6 +90,7 @@ export function PlusView({ theme, setTheme }) {
         {page === 'importer' && <ImporterCatalogue />}
         {page === 'retour' && <Retour />}
         {page === 'sheet' && <SheetView />}
+        {page === 'temps' && <SuiviTemps />}
         {page === 'nouveautes' && <Nouveautes />}
       </div>
     );
@@ -155,6 +158,23 @@ export function PlusView({ theme, setTheme }) {
           onChange={(v) => changerReglage('bloquerPrisSiAAcheter', v)}
         />
         <Interrupteur titre="Filtres du catalogue toujours visibles" detail="Sinon, ils sont derrière le bouton « Filtres »" valeur={reglages.filtresVisibles} onChange={(v) => changerReglage('filtresVisibles', v)} />
+        <Interrupteur titre="Bouton 🛒 sur chaque article" detail="Dans À prendre, Charger, À sortir : basculer « à acheter » d'un toucher" valeur={reglages.boutonAchat} onChange={(v) => changerReglage('boutonAchat', v)} />
+        <Interrupteur titre="« 🛒 À acheter » dans la liste des lieux" detail="Première option de la liste des lieux d'un article" valeur={reglages.achatDansLieu} onChange={(v) => changerReglage('achatDansLieu', v)} />
+        <div className="space-y-1 py-2">
+          <span className="block">⏱ Démarrage du chrono</span>
+          <select className="w-full text-sm" value={reglages.chronoDemarrage} onChange={(e) => changerReglage('chronoDemarrage', e.target.value)}>
+            <option value="suggestions">Un toucher + suggestions (ex. « ▶ Préparation » dans À prendre)</option>
+            <option value="auto">Automatique selon l'écran affiché (s'arrête quand l'appli est cachée)</option>
+            <option value="manuel">Manuel uniquement</option>
+          </select>
+        </div>
+        <div className="space-y-1 py-2">
+          <span className="block">⏱ Commandes du chrono</span>
+          <select className="w-full text-sm" value={reglages.chronoInterface} onChange={(e) => changerReglage('chronoInterface', e.target.value)}>
+            <option value="bandeau">Bandeau + boutons ⏱ et ▶ dans les écrans</option>
+            <option value="onglet">Tout dans l'onglet Temps du déplacement</option>
+          </select>
+        </div>
       </section>
 
       <div className="space-y-2 rounded-2xl bg-white p-3 text-sm shadow-sm dark:bg-slate-900">
@@ -439,6 +459,7 @@ export function Catalogue() {
                     <span className="shrink-0">{TYPE_ICON[a.type]}</span>
                     <span className="min-w-0 flex-1">
                       <span className={`block font-medium ${dense ? 'truncate' : ''}`}>
+                        {a.kit && <span title="Basique">📦 </span>}
                         {a.nom}
                         {a.a_acheter && <span className="ml-1" title="À acheter">🛒</span>}
                       </span>

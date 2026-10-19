@@ -209,7 +209,7 @@ export function BacklogView() {
 /** Bouton rond « + » au-dessus de la barre du bas. */
 export function BoutonAjout({ onClick, label }) {
   return (
-    <button type="button" onClick={onClick} aria-label={label} className="fixed right-4 bottom-16 z-30 mb-[env(safe-area-inset-bottom)] flex size-14 items-center justify-center rounded-full bg-sky-600 text-white shadow-lg active:scale-95">
+    <button type="button" onClick={onClick} aria-label={label} className="fixed right-4 bottom-[calc(var(--bas)+1rem)] z-30 mb-[env(safe-area-inset-bottom)] flex size-14 items-center justify-center rounded-full bg-sky-600 text-white shadow-lg active:scale-95">
       <Icon name="plus" className="size-7" strokeWidth={2.5} />
     </button>
   );
@@ -323,7 +323,8 @@ export function LigneTache({ tache, app, intervention, onOpen, extra, dense, gro
                 ou ?? (groupee ? null : <span key="sb" className="text-slate-400">Sans bien</span>),
                 tache.echeance && <span key="e" className={retard ? 'font-bold text-red-600' : ''}>📅 {dateCourte(tache.echeance)}</span>,
                 s === 'reportee' && <span key="r" className="font-semibold text-amber-600">{STATUTS_TACHE.reportee}</span>,
-                !ou && !tache.echeance && s !== 'reportee' && tache.ref ? <span key="ref" className="text-slate-400">{refTache(tache)}</span> : null,
+                s === 'en_cours' && <span key="c" className="font-semibold text-violet-600 dark:text-violet-400">{STATUTS_TACHE.en_cours}</span>,
+                !ou && !tache.echeance && s !== 'reportee' && s !== 'en_cours' && tache.ref ? <span key="ref" className="text-slate-400">{refTache(tache)}</span> : null,
               ]
                 .filter(Boolean)
                 .reduce((acc, el, k) => (k ? [...acc, ' · ', el] : [el]), [])}
@@ -347,6 +348,7 @@ export function LigneTache({ tache, app, intervention, onOpen, extra, dense, gro
           {ou && <span className={intervention ? 'text-sky-700 dark:text-sky-400' : ''}>{ou}</span>}
           {tache.echeance && <span className={retard ? 'font-bold text-red-600' : ''}>📅 {dateCourte(tache.echeance)}</span>}
           {s === 'reportee' && <span className="font-semibold text-amber-600">{STATUTS_TACHE.reportee}</span>}
+          {s === 'en_cours' && <span className="font-semibold text-violet-600 dark:text-violet-400">{STATUTS_TACHE.en_cours}</span>}
           {compteurs}
         </span>
         {extra}

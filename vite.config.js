@@ -34,6 +34,8 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
         // Les anciennes versions conservées (v1/, v2/…) ne doivent pas être servies par cette version.
         navigateFallbackDenylist: [/\/v\d+(\.\d+)?\//],
+        // Boutons Pause / Stop de la notification du chrono (Android).
+        importScripts: ['chrono-sw.js'],
       },
     }),
   ],

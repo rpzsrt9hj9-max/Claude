@@ -4,8 +4,10 @@
 
 import { interventionTacheId } from './schema.js';
 
-export const STATUTS_TACHE = { a_traiter: 'À traiter', reportee: 'Reportée', terminee: 'Terminée' };
-export const STATUT_ORDER = ['a_traiter', 'reportee', 'terminee'];
+export const STATUTS_TACHE = { a_traiter: 'À traiter', en_cours: 'En cours', reportee: 'Reportée', terminee: 'Terminée' };
+export const STATUT_ORDER = ['a_traiter', 'en_cours', 'reportee', 'terminee'];
+// À la clôture d'une intervention, une tâche finit terminée, reportée ou à traiter.
+export const STATUTS_CLOTURE = ['a_traiter', 'reportee', 'terminee'];
 
 /** Statut d'une tâche, y compris pour les anciennes lignes qui n'avaient que `fait`. */
 export const statutTache = (t) => t.statut || (t.fait ? 'terminee' : 'a_traiter');

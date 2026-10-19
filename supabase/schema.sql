@@ -211,6 +211,8 @@ create table if not exists public.articles (
   cumul_quantites boolean,
   a_acheter boolean,
   achete_le double precision,
+  kit boolean,
+  caisse_mode text,
   created_at bigint not null,
   updated_at bigint not null,
   deleted boolean not null default false,
@@ -225,6 +227,8 @@ alter table public.articles add column if not exists unite text;
 alter table public.articles add column if not exists cumul_quantites boolean;
 alter table public.articles add column if not exists a_acheter boolean;
 alter table public.articles add column if not exists achete_le double precision;
+alter table public.articles add column if not exists kit boolean;
+alter table public.articles add column if not exists caisse_mode text;
 alter table public.articles add column if not exists owner_id uuid;
 alter table public.articles alter column owner_id set default auth.uid();
 create index if not exists articles_rev on public.articles(rev);
@@ -238,6 +242,33 @@ create policy "articles espace" on public.articles for all to authenticated
   using (public.espace_visible(owner_id)) with check (public.espace_visible(owner_id));
 grant select, insert, update on public.articles to authenticated;
 revoke all on public.articles from anon;
+
+create table if not exists public.kit_contenus (
+  id text primary key,
+  kit_id text,
+  article_id text,
+  quantite double precision,
+  created_at bigint not null,
+  updated_at bigint not null,
+  deleted boolean not null default false,
+  rev bigint
+);
+alter table public.kit_contenus add column if not exists kit_id text;
+alter table public.kit_contenus add column if not exists article_id text;
+alter table public.kit_contenus add column if not exists quantite double precision;
+alter table public.kit_contenus add column if not exists owner_id uuid;
+alter table public.kit_contenus alter column owner_id set default auth.uid();
+create index if not exists kit_contenus_rev on public.kit_contenus(rev);
+create index if not exists kit_contenus_owner_rev on public.kit_contenus(owner_id, rev);
+drop trigger if exists kit_contenus_lww on public.kit_contenus;
+create trigger kit_contenus_lww before insert or update on public.kit_contenus for each row execute function app_lww();
+alter table public.kit_contenus enable row level security;
+drop policy if exists "kit_contenus connectés" on public.kit_contenus;
+drop policy if exists "kit_contenus espace" on public.kit_contenus;
+create policy "kit_contenus espace" on public.kit_contenus for all to authenticated
+  using (public.espace_visible(owner_id)) with check (public.espace_visible(owner_id));
+grant select, insert, update on public.kit_contenus to authenticated;
+revoke all on public.kit_contenus from anon;
 
 create table if not exists public.article_accessoires (
   id text primary key,
@@ -271,6 +302,7 @@ create table if not exists public.voyages (
   nom text,
   date_debut text,
   ref double precision,
+  caisses text,
   created_at bigint not null,
   updated_at bigint not null,
   deleted boolean not null default false,
@@ -279,6 +311,7 @@ create table if not exists public.voyages (
 alter table public.voyages add column if not exists nom text;
 alter table public.voyages add column if not exists date_debut text;
 alter table public.voyages add column if not exists ref double precision;
+alter table public.voyages add column if not exists caisses text;
 alter table public.voyages add column if not exists owner_id uuid;
 alter table public.voyages alter column owner_id set default auth.uid();
 create index if not exists voyages_rev on public.voyages(rev);
@@ -292,6 +325,33 @@ create policy "voyages espace" on public.voyages for all to authenticated
   using (public.espace_visible(owner_id)) with check (public.espace_visible(owner_id));
 grant select, insert, update on public.voyages to authenticated;
 revoke all on public.voyages from anon;
+
+create table if not exists public.voyage_articles (
+  id text primary key,
+  voyage_id text,
+  article_id text,
+  quantite double precision,
+  created_at bigint not null,
+  updated_at bigint not null,
+  deleted boolean not null default false,
+  rev bigint
+);
+alter table public.voyage_articles add column if not exists voyage_id text;
+alter table public.voyage_articles add column if not exists article_id text;
+alter table public.voyage_articles add column if not exists quantite double precision;
+alter table public.voyage_articles add column if not exists owner_id uuid;
+alter table public.voyage_articles alter column owner_id set default auth.uid();
+create index if not exists voyage_articles_rev on public.voyage_articles(rev);
+create index if not exists voyage_articles_owner_rev on public.voyage_articles(owner_id, rev);
+drop trigger if exists voyage_articles_lww on public.voyage_articles;
+create trigger voyage_articles_lww before insert or update on public.voyage_articles for each row execute function app_lww();
+alter table public.voyage_articles enable row level security;
+drop policy if exists "voyage_articles connectés" on public.voyage_articles;
+drop policy if exists "voyage_articles espace" on public.voyage_articles;
+create policy "voyage_articles espace" on public.voyage_articles for all to authenticated
+  using (public.espace_visible(owner_id)) with check (public.espace_visible(owner_id));
+grant select, insert, update on public.voyage_articles to authenticated;
+revoke all on public.voyage_articles from anon;
 
 create table if not exists public.deplacements (
   id text primary key,
@@ -543,6 +603,45 @@ create policy "stocks espace" on public.stocks for all to authenticated
 grant select, insert, update on public.stocks to authenticated;
 revoke all on public.stocks from anon;
 
+create table if not exists public.temps (
+  id text primary key,
+  activite text,
+  debut double precision,
+  fin double precision,
+  voyage_id text,
+  intervention_id text,
+  tache_id text,
+  appartement_id text,
+  contexte text,
+  note text,
+  created_at bigint not null,
+  updated_at bigint not null,
+  deleted boolean not null default false,
+  rev bigint
+);
+alter table public.temps add column if not exists activite text;
+alter table public.temps add column if not exists debut double precision;
+alter table public.temps add column if not exists fin double precision;
+alter table public.temps add column if not exists voyage_id text;
+alter table public.temps add column if not exists intervention_id text;
+alter table public.temps add column if not exists tache_id text;
+alter table public.temps add column if not exists appartement_id text;
+alter table public.temps add column if not exists contexte text;
+alter table public.temps add column if not exists note text;
+alter table public.temps add column if not exists owner_id uuid;
+alter table public.temps alter column owner_id set default auth.uid();
+create index if not exists temps_rev on public.temps(rev);
+create index if not exists temps_owner_rev on public.temps(owner_id, rev);
+drop trigger if exists temps_lww on public.temps;
+create trigger temps_lww before insert or update on public.temps for each row execute function app_lww();
+alter table public.temps enable row level security;
+drop policy if exists "temps connectés" on public.temps;
+drop policy if exists "temps espace" on public.temps;
+create policy "temps espace" on public.temps for all to authenticated
+  using (public.espace_visible(owner_id)) with check (public.espace_visible(owner_id));
+grant select, insert, update on public.temps to authenticated;
+revoke all on public.temps from anon;
+
 -- ---------- Les données existantes appartiennent à l'administrateur ----------
 do $$
 declare adm uuid;
@@ -553,8 +652,10 @@ begin
     update public.appartements set owner_id = adm where owner_id is null;
     update public.categories set owner_id = adm where owner_id is null;
     update public.articles set owner_id = adm where owner_id is null;
+    update public.kit_contenus set owner_id = adm where owner_id is null;
     update public.article_accessoires set owner_id = adm where owner_id is null;
     update public.voyages set owner_id = adm where owner_id is null;
+    update public.voyage_articles set owner_id = adm where owner_id is null;
     update public.deplacements set owner_id = adm where owner_id is null;
     update public.taches set owner_id = adm where owner_id is null;
     update public.tache_articles set owner_id = adm where owner_id is null;
@@ -563,14 +664,17 @@ begin
     update public.commentaires set owner_id = adm where owner_id is null;
     update public.photos set owner_id = adm where owner_id is null;
     update public.stocks set owner_id = adm where owner_id is null;
+    update public.temps set owner_id = adm where owner_id is null;
   end if;
 end $$;
 alter table public.lieux alter column owner_id set not null;
 alter table public.appartements alter column owner_id set not null;
 alter table public.categories alter column owner_id set not null;
 alter table public.articles alter column owner_id set not null;
+alter table public.kit_contenus alter column owner_id set not null;
 alter table public.article_accessoires alter column owner_id set not null;
 alter table public.voyages alter column owner_id set not null;
+alter table public.voyage_articles alter column owner_id set not null;
 alter table public.deplacements alter column owner_id set not null;
 alter table public.taches alter column owner_id set not null;
 alter table public.tache_articles alter column owner_id set not null;
@@ -579,6 +683,7 @@ alter table public.intervention_taches alter column owner_id set not null;
 alter table public.commentaires alter column owner_id set not null;
 alter table public.photos alter column owner_id set not null;
 alter table public.stocks alter column owner_id set not null;
+alter table public.temps alter column owner_id set not null;
 
 -- ---------- Migration : déplacements -> interventions ----------
 do $$

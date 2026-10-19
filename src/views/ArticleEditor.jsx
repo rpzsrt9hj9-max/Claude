@@ -6,7 +6,8 @@ import { batteriesCompatibles, estBatterie, estChargeur, tension } from '../../s
 import { quantiteStock } from '../../shared/achats.js';
 import { Button, CategorieSelect, Icon, LieuSelect, Segmented, Sheet, Stepper, TextField, TYPE_OPTIONS } from '../components/ui.jsx';
 import { ArticleCreator } from '../components/ArticleCreator.jsx';
-import { deleteArticle, duplicateArticle, rangerArticles, removeAccessoire, setAccessoire, setStock, updateArticle } from '../actions.js';
+import { deleteArticle, duplicateArticle, rangerArticles, removeAccessoire, retirerContenuKit, setAccessoire, setContenuKit, setStock, updateArticle } from '../actions.js';
+import { MODES_CAISSE } from '../../shared/caisses.js';
 
 /** Fiche d'un article du catalogue. */
 export function ArticleEditor({ article, onClose, onOpen }) {
@@ -21,6 +22,8 @@ export function ArticleEditor({ article, onClose, onOpen }) {
     notes: article.notes ?? '',
     cumul_quantites: !!article.cumul_quantites,
     a_acheter: !!article.a_acheter,
+    kit: !!article.kit,
+    caisse_mode: article.caisse_mode || 'auto',
   });
   const [stock, setStockSaisi] = useState(stockInitial == null ? '' : String(stockInitial));
   const [copie, setCopie] = useState(null);
@@ -32,7 +35,7 @@ export function ArticleEditor({ article, onClose, onOpen }) {
     // Changement de lieu : la quantité en stock suit (et « acheté » disparaît une fois rangé).
     if ((f.lieu_id ?? null) !== (article.lieu_id ?? null)) await rangerArticles([article.id], f.lieu_id, data);
     const { lieu_id: _l, ...reste } = f;
-    await updateArticle(article.id, { ...reste, nom: f.nom.trim(), unite: f.unite.trim() || null, notes: f.notes.trim() || null, ...(f.a_acheter ? { achete_le: null } : {}) });
+    await updateArticle(article.id, { ...reste, caisse_mode: f.caisse_mode === 'auto' ? null : f.caisse_mode, nom: f.nom.trim(), unite: f.unite.trim() || null, notes: f.notes.trim() || null, ...(f.a_acheter ? { achete_le: null } : {}) });
     const q = stock.trim() === '' ? null : Number(stock.replace(',', '.'));
     if ((q ?? null) !== (stockInitial ?? null) && (q == null || Number.isFinite(q))) await setStock({ ...article, lieu_id: f.lieu_id }, q, data);
     onClose();
@@ -106,6 +109,26 @@ export function ArticleEditor({ article, onClose, onOpen }) {
         )}
         {estBatterie({ nom: f.nom }) && <p className="rounded-xl bg-slate-100 p-3 text-sm dark:bg-slate-800">🔋 Batterie : une par outil qui la propose, dans chaque déplacement.</p>}
         {estChargeur({ nom: f.nom }) && <p className="rounded-xl bg-slate-100 p-3 text-sm dark:bg-slate-800">🔌 Chargeur : jamais proposé automatiquement, à ajouter à la main dans une tâche si besoin.</p>}
+
+        <label className="flex min-h-11 items-center gap-3 rounded-xl bg-white p-3 dark:bg-slate-900">
+          <input type="checkbox" className="size-6 !min-h-0" checked={f.kit} onChange={(e) => set('kit')(e.target.checked)} />
+          <span>
+            <span className="block font-medium">📦 C'est un basique (caisse à vérifier)</span>
+            <span className="text-sm text-slate-500">Une seule ligne dans la tâche ; son contenu se coche au chargement</span>
+          </span>
+        </label>
+        {f.kit && <ContenuKit kit={article} />}
+
+        <label className="block">
+          <span className={label}>Caisse dans un déplacement à plusieurs biens</span>
+          <select className="w-full" value={f.caisse_mode} onChange={(e) => set('caisse_mode')(e.target.value)}>
+            {MODES_CAISSE.map(([v, l]) => (
+              <option key={v} value={v}>
+                {v === 'auto' ? `Automatique (${f.type === 'materiel' && !f.kit ? 'réparti par bien' : 'en commun'})` : l}
+              </option>
+            ))}
+          </select>
+        </label>
 
         <ItemsAProposer article={article} nomActuel={f.nom} typeActuel={f.type} />
 
@@ -240,6 +263,60 @@ function ItemsAProposer({ article, nomActuel, typeActuel }) {
       {creating && (
         <ArticleCreator nom={q} articles={data.articles} lieux={data.lieux} categories={data.categories} defaultType="accessoire" onUseExisting={add} onCreated={add} onCancel={() => setCreating(false)} />
       )}
+    </section>
+  );
+}
+
+/** Contenu d'un basique (kit) : la liste à vérifier quand on prend la caisse. Elle évolue avec le temps. */
+function ContenuKit({ kit }) {
+  const { data } = useData();
+  const [q, setQ] = useState('');
+  const contenu = (data.kit_contenus || [])
+    .filter((k) => k.kit_id === kit.id)
+    .map((k) => ({ lien: k, article: data.articles.find((a) => a.id === k.article_id) }))
+    .filter((x) => x.article)
+    .sort((a, b) => a.article.nom.localeCompare(b.article.nom, 'fr'));
+  const dedans = new Set(contenu.map((x) => x.article.id));
+  const resultats = q.trim() ? data.articles.filter((a) => a.id !== kit.id && matchesSearch(a.nom, q)).slice(0, 8) : [];
+  return (
+    <section className="space-y-2 rounded-2xl bg-sky-50 p-3 dark:bg-sky-500/10">
+      <h3 className="font-semibold">📦 Contenu du basique ({contenu.length})</h3>
+      <ul className="divide-y divide-slate-200 rounded-xl bg-white dark:divide-slate-800 dark:bg-slate-900">
+        {contenu.map(({ lien, article }) => (
+          <li key={lien.id} className="flex items-center gap-1.5 py-0.5 pl-2.5">
+            <span className="min-w-0 flex-1 truncate text-sm">
+              {TYPE_ICON[article.type]} {article.nom}
+            </span>
+            <Stepper compact value={Number(lien.quantite) || 1} min={0.001} onChange={(v) => setContenuKit(kit.id, article.id, v)} />
+            <Button variant="ghost" icon="x" className="!min-h-9 !min-w-9 !px-1.5 text-slate-400" aria-label={`Retirer ${article.nom} du basique`} onClick={() => retirerContenuKit(kit.id, article.id)} />
+          </li>
+        ))}
+        {!contenu.length && <li className="p-2 text-sm text-slate-500">Vide pour l'instant : ajoute ce qu'il y a dans la caisse.</li>}
+      </ul>
+      <input type="search" className="w-full !min-h-10" placeholder="🔍 Ajouter au basique…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Ajouter au basique" />
+      {resultats.length > 0 && (
+        <ul className="space-y-1">
+          {resultats.map((a) => (
+            <li key={a.id}>
+              <button
+                type="button"
+                disabled={dedans.has(a.id)}
+                onClick={() => setContenuKit(kit.id, a.id, 1)}
+                className={`flex min-h-10 w-full items-center gap-2 rounded-xl px-3 text-left text-sm ${dedans.has(a.id) ? 'bg-emerald-50 text-slate-500 dark:bg-emerald-950' : 'bg-white active:bg-sky-100 dark:bg-slate-900'}`}
+              >
+                {dedans.has(a.id) ? <Icon name="check" className="size-4 text-emerald-600" /> : <Icon name="plus" className="size-4 text-sky-600" />}
+                {TYPE_ICON[a.type]} {a.nom}
+              </button>
+            </li>
+          ))}
+          <li>
+            <button type="button" className="min-h-9 w-full text-center text-sm text-slate-500" onClick={() => setQ('')}>
+              Fermer la liste
+            </button>
+          </li>
+        </ul>
+      )}
+      {q.trim() && !resultats.length && <p className="text-sm text-slate-500">Aucun article de ce nom : crée-le d'abord dans le catalogue.</p>}
     </section>
   );
 }

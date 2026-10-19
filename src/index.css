@@ -5,6 +5,11 @@
   --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 }
 
+:root {
+  /* Hauteur occupée en bas de l'écran (barre des onglets, + bandeau du chrono quand il tourne). */
+  --bas: 3rem;
+}
+
 html,
 body {
   @apply bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100;

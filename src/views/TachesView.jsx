@@ -8,6 +8,7 @@ import { useReglages } from '../reglages.js';
 import { ChoixTaches } from './ChoixTaches.jsx';
 import { saveTache, setStatutTache, createFromModeles, addTachesToIntervention, addTachesToVoyage, retirerTacheAnnulable, supprimerTache } from '../actions.js';
 import { Glissable } from '../components/Glissable.jsx';
+import { BoutonTacheChrono } from '../components/Chrono.jsx';
 import { bienIntervention, interventionsDuVoyage } from '../../shared/voyages.js';
 import { TYPES, TYPE_ICON, TYPE_ORDER } from '../../shared/schema.js';
 import { STATUTS_TACHE, enRetard, statutTache } from '../../shared/interventions.js';
@@ -162,6 +163,7 @@ export function TachesView() {
 }
 
 function TacheRow({ info, onOpen, onRetirer, onSupprimer, dense }) {
+  const { ctxChrono } = useData();
   const { tache, prete, byType } = info;
   const statut = statutTache(tache);
   const fait = statut === 'terminee';
@@ -188,14 +190,16 @@ function TacheRow({ info, onOpen, onRetirer, onSupprimer, dense }) {
             {!fait && prete && <span className="size-2.5 shrink-0 rounded-full bg-emerald-500" title="Prête" aria-label="Prête" />}
             <span className="truncate">{tache.titre}</span>
           </span>
-          {(tache.echeance || statut === 'reportee') && (
+          {(tache.echeance || statut === 'reportee' || statut === 'en_cours') && (
             <span className="block truncate text-xs text-slate-500">
               {tache.echeance && <span className={enRetard(tache) ? 'font-bold text-red-600' : ''}>📅 {dateCourte(tache.echeance)}</span>}
               {statut === 'reportee' && <span className="font-semibold text-amber-600"> · {STATUTS_TACHE.reportee}</span>}
+              {statut === 'en_cours' && <span className="font-semibold text-violet-600"> · {STATUTS_TACHE.en_cours}</span>}
             </span>
           )}
           <span className="mt-0.5 hidden flex-wrap gap-1 sm:flex">{pastilles}</span>
         </button>
+        {!fait && ctxChrono && <BoutonTacheChrono tache={tache} ctx={ctxChrono} />}
       </div>
       </Glissable>
     );
@@ -209,10 +213,12 @@ function TacheRow({ info, onOpen, onRetirer, onSupprimer, dense }) {
           <span className="mt-1 flex flex-wrap items-center gap-1">
             {tache.echeance && <span className={`text-xs ${enRetard(tache) ? 'font-bold text-red-600' : 'text-slate-500'}`}>📅 {dateCourte(tache.echeance)}</span>}
             {statut === 'reportee' && <span className="text-xs font-semibold text-amber-600">{STATUTS_TACHE.reportee}</span>}
+            {statut === 'en_cours' && <span className="text-xs font-semibold text-violet-600">{STATUTS_TACHE.en_cours}</span>}
             {pastilles}
             {!fait && prete && <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400">✓ Prête</span>}
           </span>
         </button>
+        {!fait && ctxChrono && <BoutonTacheChrono tache={tache} ctx={ctxChrono} />}
       </div>
       {!fait && tache.description?.includes('[') && (
         <div className="mt-1 pl-14">

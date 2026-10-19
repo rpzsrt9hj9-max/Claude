@@ -3,7 +3,7 @@ import { useData } from '../data.js';
 import { groupByType, formatQty } from '../../shared/calc.js';
 import { TYPES, TYPE_ICON } from '../../shared/schema.js';
 import { ArticleEditor } from './ArticleEditor.jsx';
-import { ItemRow, bloqueParAchat } from './ArticlesView.jsx';
+import { ItemRow, bloqueParAchat, retirerDeLaListe } from './ArticlesView.jsx';
 import { Button, Empty, Icon, ProgressBar } from '../components/ui.jsx';
 import { markAllPris } from '../actions.js';
 import { useReglages } from '../reglages.js';
@@ -14,8 +14,9 @@ const titreType = (type) => `${TYPE_ICON[type]} ${TYPES[type]}`;
 /**
  * Checklist : tout ce qui n'est pas encore coché, groupé par type puis par lieu, sur un seul écran.
  * Par défaut, chargement du déplacement (contexte) ; avec `cle` et `trip`, liste « À sortir » d'une intervention.
+ * charges (À sortir) : articles chargés dans la voiture ; on ne peut sortir que ceux-là (bleu), les autres sont grisés.
  */
-export function ChecklistView({ cle, trip: tripProp, sortie = false }) {
+export function ChecklistView({ cle, trip: tripProp, sortie = false, charges }) {
   const ctx = useData();
   const { data, dep } = ctx;
   const reglages = useReglages();
@@ -25,7 +26,8 @@ export function ChecklistView({ cle, trip: tripProp, sortie = false }) {
   const missing = trip.items.filter((i) => !i.status.complet);
   const done = trip.items.length - missing.length;
   // Les articles encore à acheter ne sont pas cochés d'office par « Tout est chargé ».
-  const cochables = sortie ? missing : missing.filter((i) => !bloqueParAchat(i.article, reglages));
+  const dansVoiture = (i) => !charges || charges.has(i.article.id);
+  const cochables = sortie ? missing.filter(dansVoiture) : missing.filter((i) => !bloqueParAchat(i.article, reglages));
 
   const allLoaded = async () => {
     if (!confirm(`Marquer les ${cochables.length} article(s) restants comme ${sortie ? 'sortis' : 'pris'} ?`)) return;
@@ -65,7 +67,15 @@ export function ChecklistView({ cle, trip: tripProp, sortie = false }) {
                 </h3>
                 <ul className="space-y-1">
                   {g.items.map((i) => (
-                    <ItemRow key={i.article.id} item={i} cle={depId} verbe={sortie ? 'sorti' : 'pris'} onEdit={() => setEditing(i.article)} />
+                    <ItemRow
+                      key={i.article.id}
+                      item={i}
+                      cle={depId}
+                      verbe={sortie ? 'sorti' : 'pris'}
+                      onEdit={() => setEditing(i.article)}
+                      onRetirer={sortie ? undefined : () => retirerDeLaListe(i, depId, data)}
+                      fondSortie={sortie ? (dansVoiture(i) ? 'dedans' : 'absent') : undefined}
+                    />
                   ))}
                 </ul>
               </div>
@@ -76,7 +86,7 @@ export function ChecklistView({ cle, trip: tripProp, sortie = false }) {
 
       {cochables.length > 0 && (
         <Button variant="success" icon="check" className="w-full !min-h-12" onClick={allLoaded}>
-          {sortie ? 'Tout est sorti' : 'Tout est chargé'}
+          {sortie ? (cochables.length < missing.length ? `Tout ce qui est dans la voiture est sorti (${cochables.length})` : 'Tout est sorti') : 'Tout est chargé'}
         </Button>
       )}
       {editing && <ArticleEditor article={editing} onClose={() => setEditing(null)} />}

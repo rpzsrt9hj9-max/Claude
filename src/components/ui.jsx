@@ -109,7 +109,8 @@ export function Pill({ ok, children }) {
   );
 }
 
-export function Stepper({ value, onChange, min = 0, step = 1, label = 'Quantité' }) {
+export function Stepper({ value, onChange, min = 0, step = 1, label = 'Quantité', compact = false }) {
+  const t = compact ? 'size-9' : 'size-11';
   const [text, setText] = useState(String(value ?? ''));
   useEffect(() => setText(String(value ?? '')), [value]);
   const commit = (v) => {
@@ -119,12 +120,12 @@ export function Stepper({ value, onChange, min = 0, step = 1, label = 'Quantité
   };
   return (
     <div className="inline-flex items-center rounded-xl border border-slate-300 dark:border-slate-700" role="group" aria-label={label}>
-      <button type="button" className="flex size-11 items-center justify-center rounded-l-xl active:bg-slate-200 dark:active:bg-slate-800" onClick={() => value - step >= min && onChange(Math.round((value - step) * 1000) / 1000)} aria-label="Moins">
+      <button type="button" className={`flex ${t} items-center justify-center rounded-l-xl active:bg-slate-200 dark:active:bg-slate-800`} onClick={() => value - step >= min && onChange(Math.round((value - step) * 1000) / 1000)} aria-label="Moins">
         <Icon name="minus" />
       </button>
       <input
         inputMode="decimal"
-        className="!min-h-11 w-14 !rounded-none !border-0 !border-x !px-1 text-center !ring-0"
+        className={`${compact ? '!min-h-9 w-10 text-sm' : '!min-h-11 w-14'} !rounded-none !border-0 !border-x !px-1 text-center !ring-0`}
         value={text}
         aria-label={label}
         onChange={(e) => setText(e.target.value)}
@@ -132,7 +133,7 @@ export function Stepper({ value, onChange, min = 0, step = 1, label = 'Quantité
         onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
         onFocus={(e) => e.target.select()}
       />
-      <button type="button" className="flex size-11 items-center justify-center rounded-r-xl active:bg-slate-200 dark:active:bg-slate-800" onClick={() => onChange(Math.round(((Number(value) || 0) + step) * 1000) / 1000)} aria-label="Plus">
+      <button type="button" className={`flex ${t} items-center justify-center rounded-r-xl active:bg-slate-200 dark:active:bg-slate-800`} onClick={() => onChange(Math.round(((Number(value) || 0) + step) * 1000) / 1000)} aria-label="Plus">
         <Icon name="plus" />
       </button>
     </div>
@@ -222,18 +223,22 @@ async function creerDepuisListe(table, existants, libelle) {
   return deja ? deja.id : createNamed(table, nom);
 }
 
-export function LieuSelect({ lieux, value, onChange, className = '', allowEmpty = true, emptyLabel = '— Lieu ? —', creer = true }) {
+const ACHETER = '__acheter__';
+/** Liste des lieux ; avec onAcheter, une option « 🛒 À acheter » en tête (l'article bascule dans la liste d'achats). */
+export function LieuSelect({ lieux, value, onChange, className = '', allowEmpty = true, emptyLabel = '— Lieu ? —', creer = true, onAcheter }) {
   return (
     <select
       className={className}
       value={value ?? ''}
       onChange={async (e) => {
+        if (e.target.value === ACHETER) return onAcheter?.();
         if (e.target.value !== NOUVEAU) return onChange(e.target.value || null);
         const id = await creerDepuisListe('lieux', lieux, 'Nom du nouveau lieu de rangement :');
         if (id) onChange(id);
       }}
       aria-label="Lieu de stockage"
     >
+      {onAcheter && <option value={ACHETER}>🛒 À acheter</option>}
       {allowEmpty && <option value="">{emptyLabel}</option>}
       {lieux.map((l) => (
         <option key={l.id} value={l.id}>

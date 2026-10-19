@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
+import { BandeauChrono } from './components/Chrono.jsx';
+import { useContexteEcran } from './chrono.js';
 import { BandeauAnnulation } from './components/Glissable.jsx';
 import { DataContext, useAllData, useLocalState, useSyncState } from './data.js';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -63,6 +65,11 @@ function Main({ data, sync: syncInfo }) {
   const afficherBienvenue = !DEMO && !observation && !bienvenueFaite && espaceServeur === 'vide' && bienvenue === 'non' && espaceVide;
 
   const achats = nbAAcheter(data.articles);
+  // Hauteur occupée en bas (barre + bandeau du chrono) : les boutons flottants se placent au-dessus.
+  const [chronoVisible, setChronoVisible] = useState(0);
+  useEffect(() => {
+    document.documentElement.style.setProperty('--bas', chronoVisible ? '5.5rem' : '3rem');
+  }, [chronoVisible]);
   const alerte = alerteSync(syncInfo);
 
   return (
@@ -82,7 +89,8 @@ function Main({ data, sync: syncInfo }) {
           <div className="safe-top" />
         )}
 
-        <main className="px-4 pt-3 pb-24">
+        <ContexteOnglet tab={tab} />
+        <main className="px-4 pt-3 pb-[calc(var(--bas)+3rem)]">
           {tab === 'taches' && <BacklogView />}
           {tab === 'interventions' && <InterventionsView interventionId={interventionSeule} setInterventionId={setInterventionSeule} />}
           {tab === 'deplacements' && <DeplacementsView voyageId={voyageId} setVoyageId={setVoyageId} interventionId={interventionId} setInterventionId={setInterventionId} />}
@@ -92,6 +100,9 @@ function Main({ data, sync: syncInfo }) {
         <BandeauAnnulation />
 
         <nav className="safe-bottom fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 backdrop-blur dark:border-slate-800 dark:bg-slate-900/95">
+          <div className="mx-auto max-w-2xl">
+            <BandeauChrono data={data} onHauteur={setChronoVisible} />
+          </div>
           <div className="mx-auto flex max-w-2xl">
             {TABS.map(([id, label, icon]) => {
               const active = tab === id;
@@ -222,4 +233,10 @@ function Login() {
       </form>
     </div>
   );
+}
+
+/** Contexte de l'onglet affiché (niveau 0) pour le suivi du temps. */
+function ContexteOnglet({ tab }) {
+  useContexteEcran(0, { contexte: tab });
+  return null;
 }

@@ -132,7 +132,7 @@ export function BandeauAnnulation() {
   const a = useAnnulation();
   if (!a) return null;
   return (
-    <div className="safe-bottom pointer-events-none fixed inset-x-0 bottom-14 z-40 flex justify-start px-3 pr-20">
+    <div className="safe-bottom pointer-events-none fixed inset-x-0 bottom-[calc(var(--bas)+0.5rem)] z-40 flex justify-start px-3 pr-20">
       <div role="status" className="pointer-events-auto flex max-w-md min-w-0 items-center gap-1 rounded-xl bg-slate-800/95 py-1 pr-1 pl-3 text-sm text-white shadow-lg dark:bg-slate-700/95">
         <span className="min-w-0 truncate">{a.message}</span>
         <button type="button" onClick={annuler} className="min-h-9 shrink-0 rounded-lg px-3 font-bold text-sky-300 active:bg-white/10">

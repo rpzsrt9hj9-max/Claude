@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react';
+import { useContexteEcran } from '../chrono.js';
 import { useData } from '../data.js';
-import { matchesSearch, findSameName, findSimilar } from '../../shared/match.js';
+import { matchesSearch, findSameName, findSimilar, nameKey } from '../../shared/match.js';
 import { accessoiresFor } from '../../shared/ops.js';
 import { TYPES, TYPE_ICON, TYPE_ORDER } from '../../shared/schema.js';
 import { Button, Icon, Sheet, Stepper, TextField } from '../components/ui.jsx';
 import { ArticleCreator } from '../components/ArticleCreator.jsx';
-import { saveTache, deleteTache, duplicateTache, saveAsModele, addTachesToIntervention, affecter, propagerModele } from '../actions.js';
+import { saveTache, deleteTache, duplicateTache, saveAsModele, remplacerModele, addCommentaire, addTachesToIntervention, affecter, propagerModele } from '../actions.js';
 import { libellePlanification, listeVoyages, nomIntervention, voyageDe, voyageOuvert } from '../../shared/voyages.js';
 import { refTache } from '../../shared/references.js';
 import { diffModele, tachesDuModele } from '../../shared/modeles.js';
@@ -15,6 +16,8 @@ import { STATUTS_TACHE, STATUT_ORDER, ajouterEtape, commentairesTache, planifica
 import { Etapes } from '../components/Etapes.jsx';
 import { ListeCommentaires, NouveauCommentaire } from '../components/Commentaires.jsx';
 import { STATUTS } from '../../shared/schema.js';
+
+const COULEUR_STATUT = { a_traiter: 'bg-sky-600 text-white', en_cours: 'bg-violet-600 text-white', reportee: 'bg-amber-500 text-white', terminee: 'bg-emerald-600 text-white' };
 
 /**
  * Création / édition d'une tâche (ou d'une tâche type si modele = true) avec ses articles.
@@ -39,6 +42,8 @@ export function TacheEditor({ tache, modele = !!tache?.modele, defaultAppartemen
   const voyageDepart = interventionDepart ? voyageDe(interventionDepart, data) : '';
   const [voyageId, setVoyageId] = useState(voyageDepart);
   const voyagesOuverts = listeVoyages(data).filter((v) => voyageOuvert(v.id, data) || v.id === voyageDepart);
+  // Suivi du temps : tant que la fiche est ouverte, l'écran concerne cette tâche (et son intervention).
+  useContexteEcran(3, tache && !modele ? { tache_id: tache.id, intervention_id: interventionDepart?.id ?? null, voyage_id: interventionDepart ? voyageDepart : null, appartement_id: tache.appartement_id ?? null } : { contexte: modele ? 'modeles' : 'nouvelle-tache' });
 
   const draft = () => ({
     id: tache?.id,
@@ -56,6 +61,12 @@ export function TacheEditor({ tache, modele = !!tache?.modele, defaultAppartemen
     setSaving(true);
     const d = draft();
     const id = await saveTache(d, existingLinks, 0);
+    // Tâche en cours : un article ajouté maintenant manquait ; c'est noté dans le compte rendu.
+    if (tache && !modele && d.statut === 'en_cours') {
+      const avant = new Set(existingLinks.map((l) => l.article_id));
+      const ajoutes = d.links.filter((l) => !avant.has(l.article_id)).map((l) => data.articles.find((a) => a.id === l.article_id)?.nom).filter(Boolean);
+      if (ajoutes.length) await addCommentaire({ tacheId: id, texte: `🧰 Manquait : ${ajoutes.join(', ')} (à aller chercher ou à acheter)` }, data);
+    }
     const avecTache = { ...data, taches: [...data.taches.filter((t) => t.id !== id), { ...tache, id, appartement_id: d.appartement_id || null }] };
     if (!modele) {
       if (!tache && interventionId && voyageId === voyageDepart) {
@@ -101,12 +112,32 @@ export function TacheEditor({ tache, modele = !!tache?.modele, defaultAppartemen
     onOpen?.(id);
   };
 
+  // Tâche type du même nom déjà existante : remplacer, ou créer une nouvelle version sous un autre nom.
+  const [existant, setExistant] = useState(null); // { modele, nom }
   const asModele = async () => {
     const t = titre.trim();
     if (!t) return;
-    if (findSameName(t, data.modeles.map((m) => ({ nom: m.titre }))) && !confirm(`Une tâche type « ${t} » existe déjà. En créer une autre ?`)) return;
+    const meme = data.modeles.find((m) => nameKey(m.titre) === nameKey(t));
+    if (meme) {
+      let n = 2;
+      while (data.modeles.some((m) => nameKey(m.titre) === nameKey(`${t} (${n})`))) n++;
+      setExistant({ modele: meme, nom: `${t} (${n})` });
+      return;
+    }
     await saveAsModele({ titre: t, description }, links);
     setMessage(`Tâche type « ${t} » enregistrée. Tu la retrouves avec le bouton + des tâches.`);
+  };
+  const remplacerType = async () => {
+    await remplacerModele(existant.modele, { description }, links, data);
+    setMessage(`Tâche type « ${existant.modele.titre} » mise à jour.`);
+    setExistant(null);
+  };
+  const nouvelleVersion = async () => {
+    const nom = existant.nom.trim();
+    if (!nom) return;
+    await saveAsModele({ titre: nom, description }, links);
+    setMessage(`Tâche type « ${nom} » enregistrée.`);
+    setExistant(null);
   };
 
   return (
@@ -126,7 +157,7 @@ export function TacheEditor({ tache, modele = !!tache?.modele, defaultAppartemen
           <TextField value={titre} onChange={setTitre} placeholder="Ex. : Fixer le cadre" autoFocus={!tache} />
         </label>
         {!modele && (
-          <div className="grid grid-cols-3 gap-1 rounded-2xl bg-slate-200 p-1 dark:bg-slate-800" role="radiogroup" aria-label="Statut">
+          <div className="grid grid-cols-4 gap-1 rounded-2xl bg-slate-200 p-1 dark:bg-slate-800" role="radiogroup" aria-label="Statut">
             {STATUT_ORDER.map((s) => (
               <button
                 key={s}
@@ -134,7 +165,7 @@ export function TacheEditor({ tache, modele = !!tache?.modele, defaultAppartemen
                 role="radio"
                 aria-checked={statut === s}
                 onClick={() => setStatut(s)}
-                className={`min-h-11 rounded-xl text-sm font-semibold ${statut === s ? (s === 'terminee' ? 'bg-emerald-600 text-white' : s === 'reportee' ? 'bg-amber-500 text-white' : 'bg-sky-600 text-white') : 'text-slate-600 dark:text-slate-300'}`}
+                className={`min-h-11 rounded-xl px-0.5 text-[13px] leading-tight font-semibold ${statut === s ? COULEUR_STATUT[s] : 'text-slate-600 dark:text-slate-300'}`}
               >
                 {STATUTS_TACHE[s]}
               </button>
@@ -221,6 +252,21 @@ export function TacheEditor({ tache, modele = !!tache?.modele, defaultAppartemen
         {historique.length > 0 && <p className="text-sm text-slate-500">Interventions passées : {historique.map((d) => nomIntervention(d, data)).join(', ')}</p>}
 
         {message && <p className="rounded-xl bg-emerald-100 p-3 text-emerald-900 dark:bg-emerald-500/20 dark:text-emerald-200">{message}</p>}
+        {existant && (
+          <div className="space-y-2 rounded-2xl border-2 border-violet-500 bg-violet-50 p-3 dark:bg-violet-500/10">
+            <p className="font-semibold">La tâche type « {existant.modele.titre} » existe déjà.</p>
+            <Button variant="primary" className="w-full" onClick={remplacerType}>
+              Remplacer la tâche type existante
+            </Button>
+            <div className="flex gap-2">
+              <input className="min-w-0 flex-1" value={existant.nom} onChange={(e) => setExistant({ ...existant, nom: e.target.value })} aria-label="Nom de la nouvelle version" />
+              <Button onClick={nouvelleVersion}>Nouvelle version</Button>
+            </div>
+            <Button variant="ghost" className="w-full" onClick={() => setExistant(null)}>
+              Annuler
+            </Button>
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-2">
           {tache && !modele && (
@@ -368,28 +414,29 @@ function ArticlePicker({ links, setLinks }) {
   }, [links, articleById]);
 
   return (
-    <section className="space-y-3">
+    <section className="space-y-2">
       {TYPE_ORDER.map((type) =>
         byType[type].length ? (
           <div key={type}>
-            <h3 className="mb-1 font-semibold">
-              {TYPE_ICON[type]} {TYPES[type]} <span className="text-sm font-normal text-slate-500">({byType[type].length})</span>
+            <h3 className="mb-0.5 text-sm font-semibold text-slate-600 dark:text-slate-300">
+              {TYPE_ICON[type]} {TYPES[type]} <span className="font-normal text-slate-500">({byType[type].length})</span>
             </h3>
-            <ul className="divide-y divide-slate-200 rounded-2xl bg-white dark:divide-slate-800 dark:bg-slate-900">
+            <ul className="divide-y divide-slate-200 rounded-xl bg-white dark:divide-slate-800 dark:bg-slate-900">
               {byType[type].map(({ link: l, article: a }) => (
-                <li key={l.article_id} className="flex items-center gap-2 p-2">
-                  <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setFiche(a)} aria-label={`Modifier ${a.nom} dans le catalogue`}>
-                    <span className="block font-medium break-words text-sky-800 underline decoration-dotted underline-offset-4 dark:text-sky-300">
+                <li key={l.article_id} className="flex items-center gap-1.5 py-0.5 pl-2.5">
+                  <button type="button" className="min-h-10 min-w-0 flex-1 text-left" onClick={() => setFiche(a)} aria-label={`Modifier ${a.nom} dans le catalogue`}>
+                    <span className="block truncate text-sm font-medium text-sky-800 dark:text-sky-300">
                       {a.a_acheter && <span title="À acheter">🛒 </span>}
+                      {a.kit && <span title="Basique">📦 </span>}
                       {a.nom}
                     </span>
-                    <span className="text-xs text-slate-500">
+                    <span className="block truncate text-[11px] text-slate-500">
                       📍 {data.lieux.find((x) => x.id === a.lieu_id)?.nom ?? 'lieu ?'}
                       {a.unite ? ` · en ${a.unite}` : ''}
                     </span>
                   </button>
-                  <Stepper value={l.quantite} min={0.001} onChange={(v) => setQty(a.id, v)} />
-                  <Button variant="ghost" icon="x" className="!px-2" aria-label={`Retirer ${a.nom}`} onClick={() => removeLink(a.id)} />
+                  <Stepper compact value={l.quantite} min={0.001} onChange={(v) => setQty(a.id, v)} />
+                  <Button variant="ghost" icon="x" className="!min-h-9 !min-w-9 !px-1.5 text-slate-400" aria-label={`Retirer ${a.nom}`} onClick={() => removeLink(a.id)} />
                 </li>
               ))}
             </ul>
