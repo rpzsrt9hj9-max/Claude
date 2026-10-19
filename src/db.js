@@ -39,6 +39,11 @@ db.version(4).stores({
 db.version(5).stores({
   stocks: 'id, article_id, _dirty',
 });
+db.version(6).stores({
+  kit_contenus: 'id, kit_id, _dirty',
+  voyage_articles: 'id, voyage_id, _dirty',
+  temps: 'id, fin, _dirty',
+});
 
 export const BUCKET = 'photos';
 

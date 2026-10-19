@@ -2,6 +2,7 @@
 // Rien de tout cela n'est saisi à la main : tout est recalculé à partir des données.
 import { tachesIntervention } from './interventions.js';
 import { estBatterie, quantiteBatterie } from './accessoires.js';
+import { cleKit, priseId } from './schema.js';
 
 const round = (n) => Math.round(n * 1000) / 1000;
 
@@ -21,8 +22,11 @@ export function priseStatus(total, prise) {
  * deplacementId = clé des cases « Pris » (déplacement, ou cleSortie(intervention) pour « Sorti »).
  * taches : par défaut, les tâches de l'intervention deplacementId.
  * data = { articles, taches, tache_articles, prise_articles, intervention_taches, lieux } (lignes non supprimées)
+ * voyageArticles : affaires liées au déplacement lui-même (usage sans tâche : { tache: null, voyage: true }).
+ * Basiques (kits) : au chargement, l'article est « pris » quand tout son contenu est vérifié ;
+ * à la sortie (clé « sortir~… »), la caisse se sort d'un bloc.
  */
-export function computeTrip(deplacementId, data, taches = tachesIntervention(deplacementId, data)) {
+export function computeTrip(deplacementId, data, taches = tachesIntervention(deplacementId, data), voyageArticles = []) {
   const tacheById = new Map(taches.map((t) => [t.id, t]));
   const articleById = new Map(data.articles.map((a) => [a.id, a]));
   const priseByArticle = new Map(
@@ -42,6 +46,15 @@ export function computeTrip(deplacementId, data, taches = tachesIntervention(dep
     needs.get(article.id).usages.push({ tache, quantite: Number(link.quantite) || 0 });
   }
 
+  for (const va of voyageArticles) {
+    const article = articleById.get(va.article_id);
+    if (!article) continue;
+    if (!needs.has(article.id)) needs.set(article.id, { article, usages: [] });
+    needs.get(article.id).usages.push({ tache: null, voyage: true, quantite: Number(va.quantite) || 0 });
+  }
+
+  const sortie = String(deplacementId).startsWith('sortir~');
+  const priseParId = new Map(data.prise_articles.map((p) => [p.id, p]));
   const items = [];
   const liensTaches = data.tache_articles.filter((l) => tacheById.has(l.tache_id));
   for (const need of needs.values()) {
@@ -52,7 +65,22 @@ export function computeTrip(deplacementId, data, taches = tachesIntervention(dep
       ? quantiteBatterie(need.article, need.usages, liensTaches, data.article_accessoires || [])
       : need.article.cumul_quantites ? qs.reduce((s, q) => s + q, 0) : Math.max(...qs);
     const prise = priseByArticle.get(need.article.id);
-    items.push({ ...need, total: round(total), prise, status: priseStatus(total, prise) });
+    const item = { ...need, total: round(total), prise, status: priseStatus(total, prise) };
+    const contenus = need.article.kit ? (data.kit_contenus || []).filter((k) => k.kit_id === need.article.id && articleById.has(k.article_id)) : [];
+    if (contenus.length) {
+      item.contenu = contenus
+        .map((k) => {
+          const p = priseParId.get(priseId(deplacementId, cleKit(need.article.id, k.article_id)));
+          return { article: articleById.get(k.article_id), quantite: Number(k.quantite) || 1, verifie: !!p && !p.deleted && (p.pris || Number(p.quantite_prise) > 0) };
+        })
+        .sort((a, b) => a.article.nom.localeCompare(b.article.nom, 'fr'));
+      if (!sortie) {
+        const faits = item.contenu.filter((c) => c.verifie).length;
+        const etat = faits === item.contenu.length ? 'complet' : faits ? 'partiel' : 'vide';
+        item.status = { taken: etat === 'complet' ? item.total : 0, total: item.total, etat, complet: etat === 'complet', verifies: faits };
+      }
+    }
+    items.push(item);
   }
   items.sort((a, b) => a.article.nom.localeCompare(b.article.nom, 'fr'));
   const itemByArticle = new Map(items.map((i) => [i.article.id, i]));

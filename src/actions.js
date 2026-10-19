@@ -1,7 +1,7 @@
 // Actions métier côté client (écritures locales, synchronisées ensuite).
 import { avecAnnulation } from './annulation.js';
 import { db, insert, update, remove, write } from './db.js';
-import { priseId, tacheArticleId, accessoireId, defaultCumul, uuid } from '../shared/schema.js';
+import { priseId, tacheArticleId, accessoireId, defaultCumul, uuid, cleKit } from '../shared/schema.js';
 import { findSameName } from '../shared/match.js';
 import { mergeArticles, duplicateTrip, copyTache } from '../shared/ops.js';
 import { ajouterTaches, retirerTache, cloturer, planification, decocherTout } from '../shared/interventions.js';
@@ -14,31 +14,27 @@ import { marquerAchete, marquerAAcheter, ranger, fixerStock } from '../shared/ac
 import { corrigerReferences } from '../shared/references.js';
 
 /** Fixe la quantité prise d'un article ; « pris » est vrai quand la quantité totale est atteinte. */
-export function setPrise(deplacementId, item, quantite) {
+const lignePrise = (deplacementId, articleCle, quantite, pris) => ({
+  table: 'prise_articles',
+  row: { id: priseId(deplacementId, articleCle), deplacement_id: deplacementId, article_id: articleCle, pris, quantite_prise: quantite, deleted: false },
+});
+
+/** Écritures « pris » d'un article ; pour un basique au chargement, tout son contenu est coché ou décoché. */
+function ecrituresPrise(deplacementId, item, quantite) {
   const q = Math.max(0, quantite);
-  return write({
-    table: 'prise_articles',
-    row: {
-      id: priseId(deplacementId, item.article.id),
-      deplacement_id: deplacementId,
-      article_id: item.article.id,
-      pris: q >= item.total,
-      quantite_prise: q,
-      deleted: false,
-    },
-  });
+  const writes = [lignePrise(deplacementId, item.article.id, q, q >= item.total)];
+  if (item.contenu && !String(deplacementId).startsWith('sortir~')) {
+    for (const c of item.contenu) writes.push(lignePrise(deplacementId, cleKit(item.article.id, c.article.id), q >= item.total ? c.quantite : 0, q >= item.total));
+  }
+  return writes;
 }
 
+export const setPrise = (deplacementId, item, quantite) => write(ecrituresPrise(deplacementId, item, quantite));
 export const togglePris = (deplacementId, item) => setPrise(deplacementId, item, item.status.complet ? 0 : item.total);
+/** Coche ou décoche un élément du contenu d'un basique. */
+export const verifierContenu = (deplacementId, kitId, contenu, valeur) => write(lignePrise(deplacementId, cleKit(kitId, contenu.article.id), valeur ? contenu.quantite : 0, valeur));
 
-export function markAllPris(deplacementId, items) {
-  return write(
-    items.map((item) => ({
-      table: 'prise_articles',
-      row: { id: priseId(deplacementId, item.article.id), deplacement_id: deplacementId, article_id: item.article.id, pris: true, quantite_prise: item.total, deleted: false },
-    })),
-  );
-}
+export const markAllPris = (deplacementId, items) => write(items.flatMap((item) => ecrituresPrise(deplacementId, item, item.total)));
 
 /**
  * Enregistre une tâche et ses articles.
