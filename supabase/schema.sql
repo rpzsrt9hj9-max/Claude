@@ -495,6 +495,7 @@ create table if not exists public.intervention_taches (
   tache_id text,
   resultat text,
   ordre double precision,
+  instantane text,
   created_at bigint not null,
   updated_at bigint not null,
   deleted boolean not null default false,
@@ -504,6 +505,7 @@ alter table public.intervention_taches add column if not exists intervention_id 
 alter table public.intervention_taches add column if not exists tache_id text;
 alter table public.intervention_taches add column if not exists resultat text;
 alter table public.intervention_taches add column if not exists ordre double precision;
+alter table public.intervention_taches add column if not exists instantane text;
 alter table public.intervention_taches add column if not exists owner_id uuid;
 alter table public.intervention_taches alter column owner_id set default auth.uid();
 create index if not exists intervention_taches_rev on public.intervention_taches(rev);

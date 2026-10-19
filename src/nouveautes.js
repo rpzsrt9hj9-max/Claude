@@ -1,6 +1,18 @@
 // Journal des versions affiché dans l'appli (Plus → Nouveautés) ; même contenu que CHANGELOG.md.
 export const NOUVEAUTES = [
   {
+    version: 'v5.4',
+    date: '2026-10-19',
+    titre: 'Tâches reportées et historique',
+    points: [
+      'Reporter une tâche (sur place ou à la clôture) ajoute un commentaire automatique « ↪ Reportée le … (déplacement › bien) ». Sur place, la tâche reste dans l’intervention, marquée « Reportée », mais son matériel sort de À prendre, Charger et À sortir.',
+      'Après la clôture, une tâche reportée est « à replanifier » ; remise dans une nouvelle intervention, elle redevient « À traiter ».',
+      'Rapport figé : une intervention clôturée garde la tâche telle qu’elle était (titre, étapes) et ses seuls commentaires de cette intervention, même si la tâche change ensuite.',
+      'Commentaires groupés par intervention (fiche tâche, Récap), avec une petite étiquette discrète entre les interventions.',
+      'Repère « ↪ 2× » sur les tâches reportées ; elles passent en tête quand on ajoute des tâches à un déplacement.',
+    ],
+  },
+  {
     version: 'v5.3',
     date: '2026-10-19',
     titre: 'Couleurs',

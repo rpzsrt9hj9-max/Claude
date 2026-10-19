@@ -5,7 +5,7 @@ import { priseId, tacheArticleId, accessoireId, defaultCumul, uuid, cleKit, cleS
 import { findSameName } from '../shared/match.js';
 import { mergeArticles, duplicateTrip, copyTache } from '../shared/ops.js';
 import { ajouterTaches, retirerTache, cloturer, planification, decocherTout } from '../shared/interventions.js';
-import { creerVoyage, rangerDansVoyage, affecterTache, interventionsDuVoyage } from '../shared/voyages.js';
+import { creerVoyage, rangerDansVoyage, affecterTache, interventionsDuVoyage, libellePlanification } from '../shared/voyages.js';
 import { reporterSurTache } from '../shared/modeles.js';
 import { stockerPhoto, compresserPhoto, supprimerFichierPhoto, espaceId } from './db.js';
 import { supabase } from './supabase.js';
@@ -83,6 +83,12 @@ export const supprimerTache = (tache, data) =>
 /** Tâche « à prévoir » notée pendant l'état des lieux d'une intervention (non planifiée, bien de l'intervention). */
 export const prevoirTache = (titre, interventionId, appartementId) =>
   insert('taches', { titre: titre.trim(), description: null, appartement_id: appartementId || null, statut: 'a_traiter', fait: false, modele: false, deplacement_id: null, ordre: 0, constat_id: interventionId });
+
+/** Trace automatique d'un report : « ↪ Reportée le 19/10/2026 (Pau novembre › Pasteur) ». */
+export async function noterReport(tache, data, intervention = planification(tache.id, data)) {
+  const ou = intervention ? ` (${libellePlanification(intervention, data)})` : '';
+  await addCommentaire({ tacheId: tache.id, interventionId: intervention?.id ?? null, texte: `↪ Reportée le ${new Date().toLocaleDateString('fr-FR')}${ou}`, auteur: null }, data);
+}
 
 export const setFait = (tache, fait) => update('taches', tache.id, { fait, statut: fait ? 'terminee' : 'a_traiter' });
 export const setStatutTache = (tache, statut) => update('taches', tache.id, { statut, fait: statut === 'terminee' });
@@ -248,7 +254,15 @@ export const addTachesToIntervention = (interventionId, tacheIds, data) => write
 export const removeTacheFromIntervention = (interventionId, tacheId, data) => write(retirerTache(interventionId, tacheId, data));
 /** Retrait d'une tâche de l'intervention (croix bleue ou glissement partiel), annulable. La tâche reste dans la liste. */
 export const retirerTacheAnnulable = (interventionId, tache, data) => avecAnnulation(retirerTache(interventionId, tache.id, data), `« ${tache.titre} » retirée de l'intervention`);
-export const closeIntervention = (interventionId, choix, data) => write(cloturer(interventionId, choix, data));
+/** Clôture ; chaque tâche nouvellement reportée reçoit sa trace « ↪ Reportée le… ». */
+export async function closeIntervention(interventionId, choix, data) {
+  const inter = data.deplacements.find((d) => d.id === interventionId);
+  await write(cloturer(interventionId, choix, data));
+  for (const c of choix) {
+    const t = data.taches.find((x) => x.id === c.tache_id);
+    if (c.statut === 'reportee' && t && t.statut !== 'reportee') await noterReport(t, data, inter);
+  }
+}
 
 /** Supprime une intervention : ses liens et cases « Pris » ; les tâches restent dans la liste générale. */
 const ecrituresSuppressionIntervention = (dep, data) => [

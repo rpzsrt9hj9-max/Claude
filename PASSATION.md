@@ -113,7 +113,8 @@ L'utilisateur demande de **garder la version précédente à chaque mise à jour
 | v5 (suivi du temps, caisses, basiques…) | `63d6103` | /Claude/deplacements/v5/ |
 | v5.1 (temps au rapport, estimations) | `488e69f` | /Claude/deplacements/v5.1/ |
 | v5.2 (état des lieux, commentaires modifiables) | `57793f0` | /Claude/deplacements/v5.2/ |
-| v5.3 (palettes de couleurs) | dernier commit de `claude/deplacements-app` | /Claude/deplacements/ |
+| v5.3 (palettes de couleurs) | `dba6605` | /Claude/deplacements/v5.3/ |
+| v5.4 (tâches reportées, historique, rapport figé) | dernier commit de `claude/deplacements-app` | /Claude/deplacements/ |
 
 Pour publier une ancienne version : `git worktree add ../vN <commit>`, y remplacer le nom de la base Dexie `'deplacements'` par `'deplacements-vN'` (src/db.js), puis `BASE=/Claude/deplacements/vN/ npx vite build` et copier `dist/` dans `site/deplacements/vN/`. La version actuelle a `navigateFallbackDenylist: [/\/v\d+\//]` pour que son service worker ne capture pas les anciennes versions.
 
@@ -224,6 +225,11 @@ Une seule version v4 regroupe tout ce qui suit (choix de l'utilisateur). La v3 r
 
 ### v5.3 (19/10/2026) : palettes de couleurs
 - `src/palettes.js` + réglage `palette` (par appareil) ; `index.css` recalcule les couleurs Tailwind « sky » (accent) et « slate » (gris légèrement teintés) à partir de `--acc`, `--clair`, `--teinte` (color-mix) selon `html[data-palette]`. Appliquée dès le chargement par le script de `index.html`.
+
+### v5.4 (19/10/2026) : tâches reportées
+- Décisions : reporter = « à replanifier » (pas de réaffectation automatique) ; trace automatique « ↪ Reportée le… » ; reportée sur place = reste dans l'intervention (non grisée) mais son matériel sort des listes ; rapport d'une intervention clôturée **figé** (colonne `intervention_taches.instantane`) ; commentaires groupés par intervention.
+- Rattachement d'un commentaire à une intervention : `commentaires.intervention_id` (enregistré automatiquement), sinon le jour de l'intervention (`interventionDuCommentaire`). `recap()` : `parTache[].commentaires` (cette intervention) et `.historique` (les autres).
+- `ajouterTaches` remet une tâche reportée à « à traiter » ; `computeTrip` ignore le matériel des tâches au statut « reportee ».
 
 ### À garder en mémoire (décisions de l'utilisateur)
 - **Appli iPhone native : pas pour l'instant.** Le compte développeur Apple (99 €/an) est jugé trop cher pour une seule appli ; à reconsidérer s'il crée beaucoup d'applications. Piste retenue le jour venu : **Capacitor** (garder le code actuel, l'emballer en appli native) + module Swift « Activités en direct » pour le chrono sur l'écran verrouillé / Dynamic Island ; distribution famille par **TestFlight** ; fabrication sans Mac via un service en ligne (ex. Codemagic). En attendant : appli web ajoutée à l'écran d'accueil (Safari > Partager > Sur l'écran d'accueil).

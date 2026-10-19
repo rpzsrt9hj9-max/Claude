@@ -9,7 +9,7 @@ import { accessoiresFor } from '../../shared/ops.js';
 import { TYPES, TYPE_ICON, TYPE_ORDER } from '../../shared/schema.js';
 import { Button, Icon, Sheet, Stepper, TextField } from '../components/ui.jsx';
 import { ArticleCreator } from '../components/ArticleCreator.jsx';
-import { saveTache, deleteTache, duplicateTache, saveAsModele, remplacerModele, addCommentaire, addTachesToIntervention, propagerModele } from '../actions.js';
+import { saveTache, deleteTache, duplicateTache, saveAsModele, remplacerModele, addCommentaire, addTachesToIntervention, noterReport, propagerModele } from '../actions.js';
 import { affecterAIntervention, bienIntervention, interventionsDuVoyage, libellePlanification, listeVoyages, nomIntervention, voyageDe, voyageOuvert } from '../../shared/voyages.js';
 import { write } from '../db.js';
 import { refTache } from '../../shared/references.js';
@@ -18,7 +18,7 @@ import { ArticleEditor } from './ArticleEditor.jsx';
 import { ouverteDepuis } from './BacklogView.jsx';
 import { STATUTS_TACHE, STATUT_ORDER, ajouterEtape, commentairesTache, planification, statutTache, liens } from '../../shared/interventions.js';
 import { Etapes } from '../components/Etapes.jsx';
-import { ListeCommentaires, NouveauCommentaire } from '../components/Commentaires.jsx';
+import { CommentairesParIntervention, NouveauCommentaire } from '../components/Commentaires.jsx';
 import { STATUTS } from '../../shared/schema.js';
 
 const COULEUR_STATUT = { a_traiter: 'bg-sky-600 text-white', en_cours: 'bg-violet-600 text-white', reportee: 'bg-amber-500 text-white', terminee: 'bg-emerald-600 text-white' };
@@ -68,6 +68,8 @@ export function TacheEditor({ tache, modele = !!tache?.modele, defaultAppartemen
     setSaving(true);
     const d = draft();
     const id = await saveTache(d, existingLinks, 0);
+    // Reportée maintenant : trace dans les commentaires (pour l'historique).
+    if (tache && !modele && d.statut === 'reportee' && statutTache(tache) !== 'reportee') await noterReport(tache, data, prevue);
     // Tâche en cours : un article ajouté maintenant manquait ; c'est noté dans le compte rendu.
     if (tache && !modele && d.statut === 'en_cours') {
       const avant = new Set(existingLinks.map((l) => l.article_id));
@@ -281,13 +283,7 @@ export function TacheEditor({ tache, modele = !!tache?.modele, defaultAppartemen
           <section className="space-y-2">
             <h3 className="font-semibold">💬 Commentaires</h3>
             <NouveauCommentaire tacheId={tache.id} />
-            <ListeCommentaires
-              commentaires={commentairesTache(tache.id, data)}
-              titreDe={(c) => {
-                const i = c.intervention_id && data.deplacements.find((d) => d.id === c.intervention_id);
-                return i ? nomIntervention(i, data) : null;
-              }}
-            />
+            <CommentairesParIntervention commentaires={commentairesTache(tache.id, data)} />
           </section>
         )}
         {historique.length > 0 && <p className="text-sm text-slate-500">Interventions passées : {historique.map((d) => nomIntervention(d, data)).join(', ')}</p>}

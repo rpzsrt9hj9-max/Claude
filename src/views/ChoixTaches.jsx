@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useData, useLocalState } from '../data.js';
 import { Button, Empty, Icon, Sheet } from '../components/ui.jsx';
 import { FiltreBiens, dateCourte } from './BacklogView.jsx';
-import { STATUTS_TACHE, candidats, enRetard, statutTache } from '../../shared/interventions.js';
+import { STATUTS_TACHE, candidats, enRetard, reports, statutTache } from '../../shared/interventions.js';
 import { libellePlanification } from '../../shared/voyages.js';
 
 /**
@@ -54,7 +54,12 @@ export function ChoixTaches({ intervention, titre = 'Ajouter des tâches', bouto
           <span className="flex flex-wrap gap-x-3 text-xs text-slate-500">
             {appById.get(t.appartement_id) && <span>🏠 {appById.get(t.appartement_id).nom}</span>}
             {t.echeance && <span className={enRetard(t) ? 'font-bold text-red-600' : ''}>📅 {dateCourte(t.echeance)}</span>}
-            {statutTache(t) === 'reportee' && <span className="font-semibold text-amber-600">{STATUTS_TACHE.reportee}</span>}
+            {statutTache(t) === 'reportee' && (
+              <span className="font-semibold text-amber-600">
+                ↪ {STATUTS_TACHE.reportee}
+                {reports(t.id, data).length > 1 ? ` ${reports(t.id, data).length}×` : ''}
+              </span>
+            )}
             {note}
           </span>
         </span>

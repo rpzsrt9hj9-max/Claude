@@ -2,6 +2,14 @@
 
 Même contenu que la page « Nouveautés » de l'appli (Plus → Nouveautés). Les versions précédentes restent en ligne : /Claude/deplacements/vN/.
 
+## v5.4 — Tâches reportées et historique (19/10/2026)
+
+- Reporter une tâche (sur place ou à la clôture) ajoute un commentaire automatique « ↪ Reportée le … (déplacement › bien) ». Sur place, la tâche reste dans l’intervention, marquée « Reportée », mais son matériel sort de À prendre, Charger et À sortir.
+- Après la clôture, une tâche reportée est « à replanifier » ; remise dans une nouvelle intervention, elle redevient « À traiter ».
+- Rapport figé : une intervention clôturée garde la tâche telle qu’elle était (titre, étapes) et ses seuls commentaires de cette intervention, même si la tâche change ensuite.
+- Commentaires groupés par intervention (fiche tâche, Récap), avec une petite étiquette discrète entre les interventions.
+- Repère « ↪ 2× » sur les tâches reportées ; elles passent en tête quand on ajoute des tâches à un déplacement.
+
 ## v5.3 — Couleurs (19/10/2026)
 
 - Plus → Affichage → Couleurs : 6 palettes au choix, réglées par appareil : Classique, Bleu Klein, Terracotta, Sauge, Lagon, Mandarine. Elles marchent en clair comme en sombre.

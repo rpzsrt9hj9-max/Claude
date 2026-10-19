@@ -7,7 +7,7 @@ import { TacheEditor } from './TacheEditor.jsx';
 import { saveTache, setStatutTache, createFromModeles, supprimerTache } from '../actions.js';
 import { Glissable } from '../components/Glissable.jsx';
 import { matchesSearch } from '../../shared/match.js';
-import { STATUTS_TACHE, enRetard, joursDepuis, liens, planification, progressionEtapes, statutTache, tachesGenerales } from '../../shared/interventions.js';
+import { STATUTS_TACHE, enRetard, joursDepuis, liens, planification, progressionEtapes, reports, statutTache, tachesGenerales } from '../../shared/interventions.js';
 import { CLASSEMENTS_TACHES, classerTaches } from '../../shared/classement.js';
 import { libellePlanification, trouverVoyage, voyageDe } from '../../shared/voyages.js';
 import { refTache } from '../../shared/references.js';
@@ -303,6 +303,8 @@ export function LigneTache({ tache, app, intervention, onOpen, extra, dense, gro
   const etapes = progressionEtapes(tache.description);
   const nbCom = (data.commentaires || []).filter((c) => c.tache_id === tache.id).length;
   const nbArt = data.tache_articles.filter((l) => l.tache_id === tache.id).length;
+  const nbReports = reports(tache.id, data).length;
+  const marqueReport = nbReports > 0 && s !== 'terminee' ? <span key="rep" className="font-semibold text-amber-600">↪ {nbReports}×</span> : null;
   const ou = groupee
     ? intervention?.nom_perso?.trim() ? `🚐 ${intervention.nom_perso.trim()}` : null
     : intervention ? `🚐 ${libellePlanification(intervention, data)}` : app ? `🏠 ${app.nom}` : null;
@@ -329,6 +331,7 @@ export function LigneTache({ tache, app, intervention, onOpen, extra, dense, gro
                 tache.echeance && <span key="e" className={retard ? 'font-bold text-red-600' : ''}>📅 {dateCourte(tache.echeance)}</span>,
                 s === 'reportee' && <span key="r" className="font-semibold text-amber-600">{STATUTS_TACHE.reportee}</span>,
                 s === 'en_cours' && <span key="c" className="font-semibold text-violet-600 dark:text-violet-400">{STATUTS_TACHE.en_cours}</span>,
+                marqueReport,
                 !ou && !tache.echeance && s !== 'reportee' && s !== 'en_cours' && tache.ref ? <span key="ref" className="text-slate-400">{refTache(tache)}</span> : null,
               ]
                 .filter(Boolean)
@@ -354,6 +357,11 @@ export function LigneTache({ tache, app, intervention, onOpen, extra, dense, gro
           {tache.echeance && <span className={retard ? 'font-bold text-red-600' : ''}>📅 {dateCourte(tache.echeance)}</span>}
           {s === 'reportee' && <span className="font-semibold text-amber-600">{STATUTS_TACHE.reportee}</span>}
           {s === 'en_cours' && <span className="font-semibold text-violet-600 dark:text-violet-400">{STATUTS_TACHE.en_cours}</span>}
+          {marqueReport && (
+            <span className="font-semibold text-amber-600">
+              ↪ reportée {nbReports}× · {libellePlanification(reports(tache.id, data).at(-1), data)}
+            </span>
+          )}
           {compteurs}
         </span>
         {extra}

@@ -17,13 +17,13 @@ import { ACTIVITES, ORDRE_ACTIVITES, duree, formatDuree } from '../../shared/tem
 import { estimerDeplacement, tempsTache } from '../../shared/estimations.js';
 import { formatEstimation } from '../components/Chrono.jsx';
 import { CLASSEMENTS_INTERVENTIONS, classerInterventions } from '../../shared/classement.js';
-import { lignesDescription, planification } from '../../shared/interventions.js';
+import { lignesDescription, planification, reports, tacheFigee } from '../../shared/interventions.js';
 import { refIntervention, refTache, refVoyage } from '../../shared/references.js';
 import { useReglages } from '../reglages.js';
 import { AAcheterView } from './AAcheterView.jsx';
 import { LigneTache, dateCourte } from './BacklogView.jsx';
 import { TacheEditor } from './TacheEditor.jsx';
-import { CommentaireItem, ListeCommentaires, NouveauCommentaire, Photo, dateHeure } from '../components/Commentaires.jsx';
+import { CommentairesParIntervention, ListeCommentaires, NouveauCommentaire, Photo, dateHeure } from '../components/Commentaires.jsx';
 import { TachesView } from './TachesView.jsx';
 import { ArticlesView } from './ArticlesView.jsx';
 import { ChecklistView, PrintableList } from './ChecklistView.jsx';
@@ -531,20 +531,20 @@ function RecapView({ onImprimer }) {
 
       <section className="space-y-3">
         <h2 className="text-lg font-bold">💬 Commentaires des tâches</h2>
-        {r.parTache.every((g) => !g.commentaires.length) && <p className="text-sm text-slate-500">Aucun commentaire sur les tâches de cette intervention.</p>}
+        {r.parTache.every((g) => !g.commentaires.length && !g.historique.length) && <p className="text-sm text-slate-500">Aucun commentaire sur les tâches de cette intervention.</p>}
         {r.parTache
-          .filter((g) => g.commentaires.length)
+          .filter((g) => g.commentaires.length || g.historique.length)
           .map((g) => (
             <div key={g.tache.id} className="space-y-2">
               <h3 className="font-semibold">
                 {g.tache.titre}
                 <span className="ml-2 text-xs font-normal text-slate-500">{STATUTS_TACHE[lien(g.tache)?.resultat || statutTache(g.tache)]}</span>
+                {reports(g.tache.id, data).filter((i) => i.id !== dep.id).length > 0 && (
+                  <span className="ml-2 text-xs font-semibold text-amber-600">↪ reportée {reports(g.tache.id, data).filter((i) => i.id !== dep.id).length}× avant</span>
+                )}
               </h3>
-              <ul className="space-y-2">
-                {g.commentaires.map((c) => (
-                  <CommentaireItem key={c.id} c={c} choixRapport />
-                ))}
-              </ul>
+              {/* Les commentaires de cette intervention, puis l'historique des précédentes, groupés. */}
+              <CommentairesParIntervention commentaires={[...g.commentaires, ...g.historique]} />
             </div>
           ))}
       </section>
@@ -670,8 +670,11 @@ function RapportImprimable() {
       </p>
       <h2 className="mb-1 border-b border-black text-lg font-bold">Tâches</h2>
       <ul className="mb-4">
-        {r.parTache.map(({ tache }) => {
+        {r.parTache.map(({ tache: actuelle }) => {
+          // Intervention clôturée : la tâche telle qu'elle était à la clôture (rapport figé).
+          const tache = tacheFigee(actuelle, dep.id, data);
           const lignes = lignesDescription(tache.description).filter((l) => l.texte.trim());
+          const avant = reports(tache.id, data).filter((i) => i.id !== dep.id && String(i.date_debut ?? '') <= String(dep.date_debut ?? '9999'));
           return (
             <li key={tache.id} className="break-inside-avoid py-1">
               <p>
@@ -679,6 +682,7 @@ function RapportImprimable() {
                 {tache.ref ? <span className="text-xs text-gray-600"> {refTache(tache)}</span> : null} – {STATUTS_TACHE[resultat(tache)]}
                 {tempsAuRapport && tTache(tache) > 0 && <span className="text-sm"> · ⏱ {formatDuree(tTache(tache))}</span>}
               </p>
+              {avant.length > 0 && <p className="ml-6 text-xs text-gray-600">↪ Déjà reportée {avant.length}× ({avant.map((i) => libellePlanification(i, data)).join(', ')})</p>}
               {lignes.length > 0 && (
                 <div className="ml-6 text-sm">
                   {lignes.map((l) => (

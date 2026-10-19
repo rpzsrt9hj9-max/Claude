@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useData } from '../data.js';
 import { update, urlPhoto } from '../db.js';
 import { addCommentaire, deleteCommentaire, setDansRapport } from '../actions.js';
-import { dansRapport } from '../../shared/interventions.js';
+import { dansRapport, grouperParIntervention } from '../../shared/interventions.js';
+import { libellePlanification } from '../../shared/voyages.js';
 import { observation } from '../supabase.js';
 import { Button, Icon, MicButton, TextField } from './ui.jsx';
 
@@ -206,6 +207,33 @@ export function NouveauCommentaire({ tacheId = null, interventionId = null, plac
 }
 
 /** Fil de commentaires (le plus récent en haut). */
+/**
+ * Commentaires groupés par intervention, la plus récente en haut : un espace un peu plus grand
+ * et une petite étiquette (« Pau novembre › Pasteur · 20 nov. ») séparent les interventions.
+ */
+export function CommentairesParIntervention({ commentaires, choixRapport = true }) {
+  const { data } = useData();
+  if (!commentaires.length) return null;
+  const groupes = grouperParIntervention(commentaires, data).reverse();
+  return (
+    <div className="space-y-5">
+      {groupes.map((g, k) => {
+        const i = g.interventionId && data.deplacements.find((d) => d.id === g.interventionId);
+        return (
+          <div key={`${g.interventionId}-${k}`} className="space-y-2">
+            {groupes.length > 1 && (
+              <p className="px-1 text-[11px] font-medium tracking-wide text-slate-400 uppercase">
+                {i ? `${libellePlanification(i, data)}${i.date_debut ? ` · ${new Date(`${i.date_debut}T00:00`).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}` : ''}` : 'Hors intervention'}
+              </p>
+            )}
+            <ListeCommentaires commentaires={[...g.commentaires].reverse()} choixRapport={choixRapport} />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export function ListeCommentaires({ commentaires, titreDe, choixRapport = true }) {
   if (!commentaires.length) return null;
   return (

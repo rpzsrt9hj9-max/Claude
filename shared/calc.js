@@ -38,6 +38,8 @@ export function computeTrip(deplacementId, data, taches = tachesIntervention(dep
   const linksByTache = new Map();
   for (const link of data.tache_articles) {
     const tache = tacheById.get(link.tache_id);
+    // Tâche reportée : son matériel n'est plus à prendre ni à sortir.
+    if (tache && (tache.statut === 'reportee')) continue;
     const article = articleById.get(link.article_id);
     if (!tache || !article) continue;
     if (!linksByTache.has(tache.id)) linksByTache.set(tache.id, []);

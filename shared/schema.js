@@ -32,7 +32,8 @@ export const TABLES = {
   tache_articles: ['tache_id', 'article_id', 'quantite'],
   prise_articles: ['deplacement_id', 'article_id', 'pris', 'quantite_prise'],
   // Tâches d'une intervention (gardé après clôture : historique). resultat = statut donné à la clôture.
-  intervention_taches: ['intervention_id', 'tache_id', 'resultat', 'ordre'],
+  // instantane : la tâche figée à la clôture (JSON { titre, description }) pour le rapport de cette intervention.
+  intervention_taches: ['intervention_id', 'tache_id', 'resultat', 'ordre', 'instantane'],
   // Commentaires horodatés (created_at) : d'une tâche (tache_id) ou du compte rendu (tache_id vide).
   // intervention_id = intervention ouverte au moment du commentaire.
   // dans_rapport = false : exclu du rapport d'intervention (inclus par défaut).

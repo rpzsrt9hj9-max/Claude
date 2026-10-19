@@ -88,7 +88,9 @@ export function candidats(interventionId, data, filtres = {}) {
     if (autre && !cibles.has(autre.id)) ailleurs.push({ tache: t, intervention: autre });
     else libres.push(t);
   }
-  libres.sort(comparerEcheance);
+  // Les tâches reportées (qui traînent) d'abord, puis par échéance.
+  const reportee = (t) => (statutTache(t) === 'reportee' ? 0 : 1);
+  libres.sort((a, b) => reportee(a) - reportee(b) || comparerEcheance(a, b));
   ailleurs.sort((a, b) => comparerEcheance(a.tache, b.tache));
   return { libres, ailleurs };
 }
@@ -108,6 +110,9 @@ export function ajouterTaches(interventionId, tacheIds, data) {
       table: 'intervention_taches',
       row: { id: interventionTacheId(interventionId, tid), intervention_id: interventionId, tache_id: tid, resultat: null, ordre: max + i + 1, deleted: false },
     });
+    // Une tâche reportée qui entre dans une nouvelle intervention redevient « à traiter ».
+    const t = data.taches.find((x) => x.id === tid);
+    if (t && statutTache(t) === 'reportee') writes.push({ table: 'taches', row: { id: tid, statut: 'a_traiter', fait: false } });
   });
   return writes;
 }
@@ -141,9 +146,12 @@ export function cloturer(interventionId, choix, data) {
   choix.forEach(({ tache_id, statut }, i) => {
     writes.push({ table: 'taches', row: { id: tache_id, statut, fait: statut === 'terminee' } });
     const lien = tousLiens.find((l) => l.intervention_id === interventionId && l.tache_id === tache_id);
+    const t = data.taches.find((x) => x.id === tache_id);
+    // La tâche est figée telle qu'à la clôture : le rapport de cette intervention ne bougera plus.
+    const instantane = t ? JSON.stringify({ titre: t.titre, description: t.description ?? '' }) : null;
     writes.push({
       table: 'intervention_taches',
-      row: { id: interventionTacheId(interventionId, tache_id), intervention_id: interventionId, tache_id, resultat: statut, ordre: lien?.ordre ?? i + 1, deleted: false },
+      row: { id: interventionTacheId(interventionId, tache_id), intervention_id: interventionId, tache_id, resultat: statut, ordre: lien?.ordre ?? i + 1, instantane, deleted: false },
     });
   });
   writes.push({ table: 'deplacements', row: { id: interventionId, statut: 'termine' } });
@@ -165,16 +173,66 @@ export function commentairesTache(tacheId, data) {
  * Récap d'une intervention : compte rendu (commentaires sans tâche) + commentaires des tâches de
  * l'intervention, regroupés par tâche, du plus ancien au plus récent.
  */
+/** Intervention d'un commentaire : celle enregistrée, sinon celle de la tâche ce jour-là (anciens commentaires). */
+export function interventionDuCommentaire(c, data, tousLiens = liens(data)) {
+  if (c.intervention_id) return c.intervention_id;
+  if (!c.tache_id) return null;
+  const jour = aujourdhui(new Date(c.created_at));
+  const its = tousLiens.filter((l) => l.tache_id === c.tache_id).map((l) => data.deplacements.find((d) => d.id === l.intervention_id)).filter(Boolean);
+  return (its.find((i) => i.date_debut === jour) ?? (its.length === 1 ? its[0] : null))?.id ?? null;
+}
+
+/** Commentaires groupés par intervention (ordre chronologique) : [{ interventionId, commentaires }]. */
+export function grouperParIntervention(commentaires, data) {
+  const tousLiens = liens(data);
+  const groupes = [];
+  for (const c of [...commentaires].sort((a, b) => a.created_at - b.created_at)) {
+    const id = interventionDuCommentaire(c, data, tousLiens);
+    const dernier = groupes.at(-1);
+    if (dernier && dernier.interventionId === id) dernier.commentaires.push(c);
+    else groupes.push({ interventionId: id, commentaires: [c] });
+  }
+  return groupes;
+}
+
+/** Interventions où la tâche a été reportée (clôturées avec « Reportée », ou en cours avec le statut reporté). */
+export function reports(tacheId, data, tousLiens = liens(data)) {
+  const t = data.taches.find((x) => x.id === tacheId);
+  return tousLiens
+    .filter((l) => l.tache_id === tacheId)
+    .map((l) => ({ lien: l, intervention: data.deplacements.find((d) => d.id === l.intervention_id) }))
+    .filter(({ lien, intervention }) => intervention && (lien.resultat === 'reportee' || (interventionOuverte(intervention) && t && statutTache(t) === 'reportee')))
+    .map(({ intervention }) => intervention)
+    .sort((a, b) => String(a.date_debut ?? '').localeCompare(String(b.date_debut ?? '')));
+}
+
+/** Tâche telle que figée à la clôture de cette intervention (sinon la tâche actuelle). */
+export function tacheFigee(tache, interventionId, data) {
+  const l = (data.intervention_taches || []).find((x) => x.intervention_id === interventionId && x.tache_id === tache.id && !x.deleted);
+  if (!l?.instantane) return tache;
+  try {
+    return { ...tache, ...JSON.parse(l.instantane) };
+  } catch {
+    return tache;
+  }
+}
+
 export function recap(interventionId, data) {
   const coms = data.commentaires || [];
   const compteRendu = avecPhotos(coms.filter((c) => c.intervention_id === interventionId && !c.tache_id && c.genre !== 'constat'), data).sort((a, b) => a.created_at - b.created_at);
   // État des lieux : constats notés pendant l'intervention et tâches à prévoir qui en sont nées.
   const constats = avecPhotos(coms.filter((c) => c.intervention_id === interventionId && !c.tache_id && c.genre === 'constat'), data).sort((a, b) => a.created_at - b.created_at);
   const aPrevoir = data.taches.filter((t) => t.constat_id === interventionId && !t.modele);
-  const parTache = tachesIntervention(interventionId, data).map((tache) => ({
-    tache,
-    commentaires: avecPhotos(coms.filter((c) => c.tache_id === tache.id), data).sort((a, b) => a.created_at - b.created_at),
-  }));
+  // Commentaires de la tâche pendant CETTE intervention (rapport) ; les autres forment l'historique.
+  const tousLiens = liens(data);
+  const parTache = tachesIntervention(interventionId, data).map((tache) => {
+    const tous = avecPhotos(coms.filter((c) => c.tache_id === tache.id), data).sort((a, b) => a.created_at - b.created_at);
+    const ici = (c) => {
+      const i = interventionDuCommentaire(c, data, tousLiens);
+      return i === interventionId || i == null;
+    };
+    return { tache, commentaires: tous.filter(ici), historique: tous.filter((c) => !ici(c)) };
+  });
   const photos = [...compteRendu, ...constats, ...parTache.flatMap((g) => g.commentaires)].flatMap((c) => c.photos);
   return { compteRendu, parTache, photos, constats, aPrevoir };
 }

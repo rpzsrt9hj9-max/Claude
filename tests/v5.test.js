@@ -189,3 +189,50 @@ describe('v5.1 : estimations', () => {
     expect(e.trajet).toBe(4 * h); // Pasteur : médiane(4 h, 4 h) ; De Gaulle : 4 h
   });
 });
+
+import { ajouterTaches, cloturer, grouperParIntervention, recap, reports, tacheFigee } from '../shared/interventions.js';
+
+describe('v5.4 : reports et historique', () => {
+  const appliquer = (d, writes) => {
+    const out = structuredClone(d);
+    for (const { table, row } of writes) {
+      out[table] = out[table] || [];
+      const i = out[table].findIndex((x) => x.id === row.id);
+      if (i >= 0) out[table][i] = { ...out[table][i], ...row };
+      else out[table].push({ ...row });
+    }
+    return out;
+  };
+  function base2() {
+    const d = data();
+    d.deplacements = [r({ id: 'I1', appartement_id: 'G', statut: 'en_cours', date_debut: '2026-10-10' }), r({ id: 'I2', appartement_id: 'G', statut: 'en_preparation', date_debut: '2026-11-10' })];
+    d.intervention_taches = [r({ id: 'I1~tg', intervention_id: 'I1', tache_id: 'tg', ordre: 1 })];
+    d.commentaires = [
+      r({ id: 'c1', tache_id: 'tg', intervention_id: 'I1', texte: 'Pas eu le temps', created_at: new Date('2026-10-10T14:00').getTime() }),
+      r({ id: 'c0', tache_id: 'tg', intervention_id: null, texte: 'Ancien', created_at: new Date('2026-10-10T12:00').getTime() }),
+    ];
+    d.photos = [];
+    return d;
+  }
+  it('une tâche reportée sur place ne compte plus dans le matériel à prendre', () => {
+    let d = base2();
+    d.taches.find((t) => t.id === 'tg').statut = 'reportee';
+    const items = computeTrip('V', d, d.taches.filter((t) => t.id === 'tg')).items;
+    expect(items).toEqual([]);
+  });
+  it('clôture : la tâche est figée ; reportée puis remise dans une nouvelle intervention, elle redevient à traiter', () => {
+    let d = base2();
+    d = appliquer(d, cloturer('I1', [{ tache_id: 'tg', statut: 'reportee' }], d));
+    d.taches.find((t) => t.id === 'tg').description = 'Changé après coup';
+    expect(tacheFigee(d.taches.find((t) => t.id === 'tg'), 'I1', d).description).toBe('');
+    expect(reports('tg', d).map((i) => i.id)).toEqual(['I1']);
+    d = appliquer(d, ajouterTaches('I2', ['tg'], d));
+    expect(d.taches.find((t) => t.id === 'tg').statut).toBe('a_traiter');
+    expect(reports('tg', d).map((i) => i.id)).toEqual(['I1']);
+    d.commentaires.push(r({ id: 'c2', tache_id: 'tg', intervention_id: 'I2', texte: 'Fait', created_at: new Date('2026-11-10T10:00').getTime() }));
+    const rI2 = recap('I2', d).parTache[0];
+    expect(rI2.commentaires.map((c) => c.id)).toEqual(['c2']);
+    expect(rI2.historique.map((c) => c.id).sort()).toEqual(['c0', 'c1']);
+    expect(grouperParIntervention(d.commentaires, d).map((g) => g.interventionId)).toEqual(['I1', 'I2']);
+  });
+});
