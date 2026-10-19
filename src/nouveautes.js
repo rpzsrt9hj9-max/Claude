@@ -1,6 +1,14 @@
 // Journal des versions affiché dans l'appli (Plus → Nouveautés) ; même contenu que CHANGELOG.md.
 export const NOUVEAUTES = [
   {
+    version: 'v5.3',
+    date: '2026-10-19',
+    titre: 'Couleurs',
+    points: [
+      'Plus → Affichage → Couleurs : 6 palettes au choix, réglées par appareil : Classique, Bleu Klein, Terracotta, Sauge, Lagon, Mandarine. Elles marchent en clair comme en sombre.',
+    ],
+  },
+  {
     version: 'v5.2',
     date: '2026-10-19',
     titre: 'État des lieux, commentaires modifiables',

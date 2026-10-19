@@ -112,7 +112,8 @@ L'utilisateur demande de **garder la version précédente à chaque mise à jour
 | v4.2 (Google Sheet du catalogue) | `87bda14` | /Claude/deplacements/v4.2/ |
 | v5 (suivi du temps, caisses, basiques…) | `63d6103` | /Claude/deplacements/v5/ |
 | v5.1 (temps au rapport, estimations) | `488e69f` | /Claude/deplacements/v5.1/ |
-| v5.2 (état des lieux, commentaires modifiables) | dernier commit de `claude/deplacements-app` | /Claude/deplacements/ |
+| v5.2 (état des lieux, commentaires modifiables) | `57793f0` | /Claude/deplacements/v5.2/ |
+| v5.3 (palettes de couleurs) | dernier commit de `claude/deplacements-app` | /Claude/deplacements/ |
 
 Pour publier une ancienne version : `git worktree add ../vN <commit>`, y remplacer le nom de la base Dexie `'deplacements'` par `'deplacements-vN'` (src/db.js), puis `BASE=/Claude/deplacements/vN/ npx vite build` et copier `dist/` dans `site/deplacements/vN/`. La version actuelle a `navigateFallbackDenylist: [/\/v\d+\//]` pour que son service worker ne capture pas les anciennes versions.
 
@@ -220,6 +221,12 @@ Une seule version v4 regroupe tout ce qui suit (choix de l'utilisateur). La v3 r
 - Colonnes : `commentaires.genre` ('constat' = note d'état des lieux, exclue du compte rendu) ; `taches.constat_id` (intervention dont l'état des lieux a créé la tâche). `recap()` renvoie aussi `constats` et `aPrevoir`.
 - `affecterAIntervention(tacheId, cible, data)` dans `shared/voyages.js` (cible = id d'intervention, `nouvelle:<voyageId>` ou '').
 - Supabase : l'utilisateur pense ne pas avoir collé le script depuis longtemps (v4 et suivantes) ; le script `supabase/schema.sql` est cumulatif et rejouable.
+
+### v5.3 (19/10/2026) : palettes de couleurs
+- `src/palettes.js` + réglage `palette` (par appareil) ; `index.css` recalcule les couleurs Tailwind « sky » (accent) et « slate » (gris légèrement teintés) à partir de `--acc`, `--clair`, `--teinte` (color-mix) selon `html[data-palette]`. Appliquée dès le chargement par le script de `index.html`.
+
+### À garder en mémoire (décisions de l'utilisateur)
+- **Appli iPhone native : pas pour l'instant.** Le compte développeur Apple (99 €/an) est jugé trop cher pour une seule appli ; à reconsidérer s'il crée beaucoup d'applications. Piste retenue le jour venu : **Capacitor** (garder le code actuel, l'emballer en appli native) + module Swift « Activités en direct » pour le chrono sur l'écran verrouillé / Dynamic Island ; distribution famille par **TestFlight** ; fabrication sans Mac via un service en ligne (ex. Codemagic). En attendant : appli web ajoutée à l'écran d'accueil (Safari > Partager > Sur l'écran d'accueil).
 
 ## 7. Commandes
 

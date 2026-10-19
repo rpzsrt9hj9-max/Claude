@@ -2,6 +2,10 @@
 
 Même contenu que la page « Nouveautés » de l'appli (Plus → Nouveautés). Les versions précédentes restent en ligne : /Claude/deplacements/vN/.
 
+## v5.3 — Couleurs (19/10/2026)
+
+- Plus → Affichage → Couleurs : 6 palettes au choix, réglées par appareil : Classique, Bleu Klein, Terracotta, Sauge, Lagon, Mandarine. Elles marchent en clair comme en sombre.
+
 ## v5.2 — État des lieux, commentaires modifiables (19/10/2026)
 
 - Intervention : nouvel onglet « 📝 État des lieux » : constats (texte, photos) et tâches « à prévoir », créées pour le bien de l’intervention et rangées dans la liste des tâches (non planifiées). Le tout apparaît dans le rapport.

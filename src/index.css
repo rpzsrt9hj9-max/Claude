@@ -47,3 +47,45 @@ select {
     color: black !important;
   }
 }
+
+/* ---------- Palettes de couleurs (Plus > Affichage) ----------
+   Chaque palette donne une couleur principale (--acc) et une teinte de fond (--teinte).
+   Toute l'appli utilise les couleurs « sky » (accent) et « slate » (gris) : on les recalcule ici. */
+:root[data-palette='klein'] { --acc: #002fa7; --teinte: #002fa7; --clair: #4d7cff; }
+:root[data-palette='terracotta'] { --acc: #c0502e; --teinte: #d9822b; --clair: #e8825f; }
+:root[data-palette='sauge'] { --acc: #3f7a5e; --teinte: #6b8f71; --clair: #6fb391; }
+:root[data-palette='lagon'] { --acc: #0a8a8f; --teinte: #12a5a5; --clair: #3cc6c9; }
+:root[data-palette='mandarine'] { --acc: #e2560b; --teinte: #f59e0b; --clair: #ff8a4c; }
+
+:root[data-palette]:not([data-palette='classique']) {
+  --color-sky-50: color-mix(in oklch, var(--acc) 7%, white);
+  --color-sky-100: color-mix(in oklch, var(--acc) 14%, white);
+  --color-sky-200: color-mix(in oklch, var(--acc) 26%, white);
+  --color-sky-300: color-mix(in oklch, var(--clair) 60%, white);
+  --color-sky-400: color-mix(in oklch, var(--clair) 85%, white);
+  --color-sky-500: color-mix(in oklch, var(--acc) 70%, var(--clair));
+  --color-sky-600: var(--acc);
+  --color-sky-700: color-mix(in oklch, var(--acc) 85%, black);
+  --color-sky-800: color-mix(in oklch, var(--acc) 70%, black);
+  --color-sky-900: color-mix(in oklch, var(--acc) 55%, black);
+  --color-sky-950: color-mix(in oklch, var(--acc) 40%, black);
+  /* Gris légèrement teintés : fond de l'appli, cartes, bordures */
+  --color-slate-50: color-mix(in oklch, var(--teinte) 7%, #f8fafc);
+  --color-slate-100: color-mix(in oklch, var(--teinte) 10%, #f1f5f9);
+  --color-slate-200: color-mix(in oklch, var(--teinte) 12%, #e2e8f0);
+  --color-slate-300: color-mix(in oklch, var(--teinte) 10%, #cbd5e1);
+  --color-slate-700: color-mix(in oklch, var(--teinte) 10%, #334155);
+  --color-slate-800: color-mix(in oklch, var(--teinte) 14%, #1e293b);
+  --color-slate-900: color-mix(in oklch, var(--teinte) 16%, #0f172a);
+  --color-slate-950: color-mix(in oklch, var(--teinte) 18%, #020617);
+}
+/* En mode sombre, l'accent s'éclaircit pour rester lisible sur fond foncé. */
+:root.dark[data-palette]:not([data-palette='classique']) {
+  --color-sky-400: color-mix(in oklch, var(--clair) 80%, white);
+  --color-sky-500: var(--clair);
+  --color-sky-600: color-mix(in oklch, var(--acc) 60%, var(--clair));
+}
+/* Bleu Klein : profond et lumineux à la fois ; le fond reste blanc cassé pour faire ressortir le bleu. */
+:root[data-palette='klein'] {
+  --color-slate-50: #f5f7fc;
+}

@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useReglages } from './reglages.js';
+import { PALETTES } from './palettes.js';
 import { BandeauChrono } from './components/Chrono.jsx';
 import { useContexteEcran } from './chrono.js';
 import { BandeauAnnulation } from './components/Glissable.jsx';
@@ -44,11 +46,16 @@ function Main({ data, sync: syncInfo }) {
   const [interventionSeule, setInterventionSeule] = useLocalState('intervention-onglet', null);
   const [voyageId, setVoyageId] = useLocalState('voyage-ouvert', null);
   const [interventionId, setInterventionId] = useLocalState('intervention-ouverte', null);
+  const { palette } = useReglages();
+  useEffect(() => {
+    document.documentElement.dataset.palette = palette;
+  }, [palette]);
   const [theme, setTheme] = useLocalState('theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light');
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
-  }, [theme]);
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#0f172a' : (PALETTES.find((p) => p[0] === palette)?.[2] ?? '#0f172a'));
+  }, [theme, palette]);
 
   const ctx = useMemo(() => ({ data, user: syncInfo.user, sync: syncInfo }), [data, syncInfo]);
 

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { PALETTES } from '../palettes.js';
 import { SuiviTemps } from './SuiviTemps.jsx';
 import { SheetView } from './SheetView.jsx';
 import { Glissable } from '../components/Glissable.jsx';
@@ -129,6 +130,27 @@ export function PlusView({ theme, setTheme }) {
         <div className="flex items-center justify-between gap-2">
           <span>Densité</span>
           <Segmented options={[['standard', 'Standard'], ['dense', 'Dense']]} value={reglages.dense ? 'dense' : 'standard'} onChange={(v) => changerReglage('dense', v === 'dense')} />
+        </div>
+        <div className="py-2">
+          <span className="mb-2 block">Couleurs</span>
+          <div className="grid grid-cols-3 gap-2">
+            {PALETTES.map(([id, nom, acc, fond]) => (
+              <button
+                key={id}
+                type="button"
+                aria-pressed={reglages.palette === id}
+                onClick={() => changerReglage('palette', id)}
+                className={`flex min-h-16 flex-col items-center justify-center gap-1 rounded-xl border-2 p-1.5 text-xs font-medium ${reglages.palette === id ? 'border-sky-600' : 'border-transparent'}`}
+                style={{ background: fond, color: '#0f172a' }}
+              >
+                <span className="flex gap-1">
+                  <span className="size-5 rounded-full" style={{ background: acc }} />
+                  <span className="size-5 rounded-full opacity-40" style={{ background: acc }} />
+                </span>
+                {nom}
+              </button>
+            ))}
+          </div>
         </div>
         <div className="flex items-center justify-between gap-2">
           <span>Thème</span>

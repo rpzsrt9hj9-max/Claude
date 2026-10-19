@@ -10,7 +10,8 @@
     <link rel="apple-touch-icon" href="apple-touch-icon.png" />
     <title>Déplacements</title>
     <script>
-      try { if ((localStorage.getItem('theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')) === 'dark') document.documentElement.classList.add('dark'); } catch {}
+      try { document.documentElement.dataset.palette = JSON.parse(localStorage.getItem('reglages-appareil') || '{}').palette || 'classique'; } catch {}
+      try { if (((localStorage.getItem('theme') || '').replace(/"/g, '') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')) === 'dark') document.documentElement.classList.add('dark'); } catch {}
     </script>
   </head>
   <body>
