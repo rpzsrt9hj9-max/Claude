@@ -27,7 +27,8 @@ export const TABLES = {
   // statut : a_traiter | en_cours | reportee | terminee ; echeance : AAAA-MM-JJ.
   // deplacement_id et fait : anciens champs, conservés pour les données existantes.
   // modele_id = tâche type d'origine (pour reporter les modifications du modèle).
-  taches: ['deplacement_id', 'titre', 'description', 'appartement_id', 'fait', 'ordre', 'modele', 'statut', 'echeance', 'modele_id', 'ref'],
+  // constat_id = intervention dont l'état des lieux a fait naître la tâche (« à prévoir »).
+  taches: ['deplacement_id', 'titre', 'description', 'appartement_id', 'fait', 'ordre', 'modele', 'statut', 'echeance', 'modele_id', 'ref', 'constat_id'],
   tache_articles: ['tache_id', 'article_id', 'quantite'],
   prise_articles: ['deplacement_id', 'article_id', 'pris', 'quantite_prise'],
   // Tâches d'une intervention (gardé après clôture : historique). resultat = statut donné à la clôture.
@@ -35,7 +36,8 @@ export const TABLES = {
   // Commentaires horodatés (created_at) : d'une tâche (tache_id) ou du compte rendu (tache_id vide).
   // intervention_id = intervention ouverte au moment du commentaire.
   // dans_rapport = false : exclu du rapport d'intervention (inclus par défaut).
-  commentaires: ['tache_id', 'intervention_id', 'texte', 'auteur', 'dans_rapport'],
+  // genre = 'constat' : note de l'état des lieux de l'intervention (« j'ai vu ça, il y a ça à faire »).
+  commentaires: ['tache_id', 'intervention_id', 'texte', 'auteur', 'dans_rapport', 'genre'],
   // Photos jointes à un commentaire ; le fichier est dans le bucket Supabase Storage « photos ».
   photos: ['commentaire_id', 'chemin', 'legende', 'dans_rapport'],
   // Stock : quantité d'un article dans un lieu (une ligne par article et par lieu ; id = article~lieu).

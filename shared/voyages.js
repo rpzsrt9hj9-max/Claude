@@ -174,3 +174,17 @@ function appliquer(data, writes) {
   }
   return out;
 }
+
+/**
+ * Rattache une tâche à une intervention précise (et donc à son déplacement), en la retirant des autres
+ * interventions ouvertes. cible = id d'intervention, `nouvelle:<voyageId>` (intervention du bien de la tâche
+ * à créer dans ce déplacement) ou '' (pas planifiée).
+ */
+export function affecterAIntervention(tacheId, cible, data) {
+  if (!cible) return affecterTache(tacheId, null, data);
+  if (cible.startsWith('nouvelle:')) return affecterTache(tacheId, cible.slice('nouvelle:'.length), data);
+  const deja = liens(data).some((l) => l.tache_id === tacheId && l.intervention_id === cible);
+  if (deja) return [];
+  const autres = affecterTache(tacheId, null, data);
+  return [...autres, ...ajouterTaches(cible, [tacheId], data)];
+}

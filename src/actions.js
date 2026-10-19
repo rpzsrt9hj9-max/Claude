@@ -80,6 +80,10 @@ export async function deleteTache(tache, links) {
 export const supprimerTache = (tache, data) =>
   avecAnnulation(ecrituresSuppressionTache(tache, data.tache_articles.filter((l) => l.tache_id === tache.id)), `Tâche « ${tache.titre} » supprimée`);
 
+/** Tâche « à prévoir » notée pendant l'état des lieux d'une intervention (non planifiée, bien de l'intervention). */
+export const prevoirTache = (titre, interventionId, appartementId) =>
+  insert('taches', { titre: titre.trim(), description: null, appartement_id: appartementId || null, statut: 'a_traiter', fait: false, modele: false, deplacement_id: null, ordre: 0, constat_id: interventionId });
+
 export const setFait = (tache, fait) => update('taches', tache.id, { fait, statut: fait ? 'terminee' : 'a_traiter' });
 export const setStatutTache = (tache, statut) => update('taches', tache.id, { statut, fait: statut === 'terminee' });
 export const setDescription = (tache, description) => update('taches', tache.id, { description });
@@ -264,10 +268,10 @@ export const supprimerIntervention = (dep, data, nom) => avecAnnulation(ecriture
  * Ajoute un commentaire horodaté, avec photos éventuelles.
  * Pour une tâche, on note l'intervention ouverte où elle est prévue (pour le récap).
  */
-export async function addCommentaire({ tacheId = null, interventionId = null, texte, fichiers = [], auteur = null }, data) {
+export async function addCommentaire({ tacheId = null, interventionId = null, texte, fichiers = [], auteur = null, genre = null }, data) {
   const id = uuid();
   const intervention = interventionId ?? (tacheId ? planification(tacheId, data)?.id ?? null : null);
-  const writes = [{ table: 'commentaires', row: { id, tache_id: tacheId, intervention_id: intervention, texte: texte.trim() || null, auteur, deleted: false } }];
+  const writes = [{ table: 'commentaires', row: { id, tache_id: tacheId, intervention_id: intervention, texte: texte.trim() || null, auteur, genre, deleted: false } }];
   for (const f of fichiers) {
     const photoId = uuid();
     // Les photos sont rangées dans le dossier du compte (règle de sécurité du stockage).

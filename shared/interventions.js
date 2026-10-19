@@ -167,13 +167,16 @@ export function commentairesTache(tacheId, data) {
  */
 export function recap(interventionId, data) {
   const coms = data.commentaires || [];
-  const compteRendu = avecPhotos(coms.filter((c) => c.intervention_id === interventionId && !c.tache_id), data).sort((a, b) => a.created_at - b.created_at);
+  const compteRendu = avecPhotos(coms.filter((c) => c.intervention_id === interventionId && !c.tache_id && c.genre !== 'constat'), data).sort((a, b) => a.created_at - b.created_at);
+  // État des lieux : constats notés pendant l'intervention et tâches à prévoir qui en sont nées.
+  const constats = avecPhotos(coms.filter((c) => c.intervention_id === interventionId && !c.tache_id && c.genre === 'constat'), data).sort((a, b) => a.created_at - b.created_at);
+  const aPrevoir = data.taches.filter((t) => t.constat_id === interventionId && !t.modele);
   const parTache = tachesIntervention(interventionId, data).map((tache) => ({
     tache,
     commentaires: avecPhotos(coms.filter((c) => c.tache_id === tache.id), data).sort((a, b) => a.created_at - b.created_at),
   }));
-  const photos = [...compteRendu, ...parTache.flatMap((g) => g.commentaires)].flatMap((c) => c.photos);
-  return { compteRendu, parTache, photos };
+  const photos = [...compteRendu, ...constats, ...parTache.flatMap((g) => g.commentaires)].flatMap((c) => c.photos);
+  return { compteRendu, parTache, photos, constats, aPrevoir };
 }
 
 function avecPhotos(commentaires, data) {

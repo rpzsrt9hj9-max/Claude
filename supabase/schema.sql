@@ -401,6 +401,7 @@ create table if not exists public.taches (
   echeance text,
   modele_id text,
   ref double precision,
+  constat_id text,
   created_at bigint not null,
   updated_at bigint not null,
   deleted boolean not null default false,
@@ -417,6 +418,7 @@ alter table public.taches add column if not exists statut text;
 alter table public.taches add column if not exists echeance text;
 alter table public.taches add column if not exists modele_id text;
 alter table public.taches add column if not exists ref double precision;
+alter table public.taches add column if not exists constat_id text;
 alter table public.taches add column if not exists owner_id uuid;
 alter table public.taches alter column owner_id set default auth.uid();
 create index if not exists taches_rev on public.taches(rev);
@@ -523,6 +525,7 @@ create table if not exists public.commentaires (
   texte text,
   auteur text,
   dans_rapport boolean,
+  genre text,
   created_at bigint not null,
   updated_at bigint not null,
   deleted boolean not null default false,
@@ -533,6 +536,7 @@ alter table public.commentaires add column if not exists intervention_id text;
 alter table public.commentaires add column if not exists texte text;
 alter table public.commentaires add column if not exists auteur text;
 alter table public.commentaires add column if not exists dans_rapport boolean;
+alter table public.commentaires add column if not exists genre text;
 alter table public.commentaires add column if not exists owner_id uuid;
 alter table public.commentaires alter column owner_id set default auth.uid();
 create index if not exists commentaires_rev on public.commentaires(rev);

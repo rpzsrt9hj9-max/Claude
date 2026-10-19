@@ -2,6 +2,13 @@
 
 Même contenu que la page « Nouveautés » de l'appli (Plus → Nouveautés). Les versions précédentes restent en ligne : /Claude/deplacements/vN/.
 
+## v5.2 — État des lieux, commentaires modifiables (19/10/2026)
+
+- Intervention : nouvel onglet « 📝 État des lieux » : constats (texte, photos) et tâches « à prévoir », créées pour le bien de l’intervention et rangées dans la liste des tâches (non planifiées). Le tout apparaît dans le rapport.
+- Commentaires modifiables (crayon).
+- Fiche tâche : « Outillage et matériel » se masque d’un toucher (mémorisé) ; échéance et bien sur la même ligne.
+- Fiche tâche : on choisit l’intervention (et non plus le déplacement) ; le déplacement suit. Une intervention peut être créée pour le bien de la tâche dans un déplacement.
+
 ## v5.1 — Temps au rapport et estimations (19/10/2026)
 
 - Rapport d’intervention : temps passé sur chaque tâche, total sur place et, à part, trajet / préparation / achats / rangement du déplacement (non divisés). Coût si un taux horaire est réglé (Plus → Suivi du temps). Case « Afficher les temps dans le rapport » dans le Récap.

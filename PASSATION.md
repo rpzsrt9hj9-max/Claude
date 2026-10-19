@@ -111,7 +111,8 @@ L'utilisateur demande de **garder la version précédente à chaque mise à jour
 | v4.1 (glisser / croix pour supprimer, annuler, statut simplifié) | `f066d01` | /Claude/deplacements/v4.1/ |
 | v4.2 (Google Sheet du catalogue) | `87bda14` | /Claude/deplacements/v4.2/ |
 | v5 (suivi du temps, caisses, basiques…) | `63d6103` | /Claude/deplacements/v5/ |
-| v5.1 (temps au rapport, estimations) | dernier commit de `claude/deplacements-app` | /Claude/deplacements/ |
+| v5.1 (temps au rapport, estimations) | `488e69f` | /Claude/deplacements/v5.1/ |
+| v5.2 (état des lieux, commentaires modifiables) | dernier commit de `claude/deplacements-app` | /Claude/deplacements/ |
 
 Pour publier une ancienne version : `git worktree add ../vN <commit>`, y remplacer le nom de la base Dexie `'deplacements'` par `'deplacements-vN'` (src/db.js), puis `BASE=/Claude/deplacements/vN/ npx vite build` et copier `dist/` dans `site/deplacements/vN/`. La version actuelle a `navigateFallbackDenylist: [/\/v\d+\//]` pour que son service worker ne capture pas les anciennes versions.
 
@@ -214,6 +215,11 @@ Une seule version v4 regroupe tout ce qui suit (choix de l'utilisateur). La v3 r
 - Décisions : rapport = temps par tâche + total sur place, trajet/préparation à part, coût si taux horaire (réglage `tauxHoraire`, par appareil), case « Afficher les temps » (localStorage `rapport-temps`) ; préparation hors déplacement = activité générale `etude` (« Plans, devis ») ; estimation = médiane ET moyenne ; trajet estimé **par bien**, automatique, **non divisé** (le plus long des biens du déplacement).
 - `shared/estimations.js` (tests dans `tests/v5.test.js`) : `tempsTache`, `indexTaches` (tâches terminées, > 1 min, famille = tâche type sinon nom), `estimerTache`, `indexTrajets`, `estimerDeplacement`.
 - Idées pour la suite (exprimées par l'utilisateur) : exploiter davantage les données (temps par type de tâche et par bien, « matrice »), planifier une journée d'après les estimations.
+
+### v5.2 (19/10/2026)
+- Colonnes : `commentaires.genre` ('constat' = note d'état des lieux, exclue du compte rendu) ; `taches.constat_id` (intervention dont l'état des lieux a créé la tâche). `recap()` renvoie aussi `constats` et `aPrevoir`.
+- `affecterAIntervention(tacheId, cible, data)` dans `shared/voyages.js` (cible = id d'intervention, `nouvelle:<voyageId>` ou '').
+- Supabase : l'utilisateur pense ne pas avoir collé le script depuis longtemps (v4 et suivantes) ; le script `supabase/schema.sql` est cumulatif et rejouable.
 
 ## 7. Commandes
 

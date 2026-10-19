@@ -3,14 +3,15 @@ import { estimerTache, tempsTache } from '../../shared/estimations.js';
 import { formatDuree } from '../../shared/temps.js';
 import { formatEstimation } from '../components/Chrono.jsx';
 import { useContexteEcran } from '../chrono.js';
-import { useData } from '../data.js';
+import { useData, useLocalState } from '../data.js';
 import { matchesSearch, findSameName, findSimilar, nameKey } from '../../shared/match.js';
 import { accessoiresFor } from '../../shared/ops.js';
 import { TYPES, TYPE_ICON, TYPE_ORDER } from '../../shared/schema.js';
 import { Button, Icon, Sheet, Stepper, TextField } from '../components/ui.jsx';
 import { ArticleCreator } from '../components/ArticleCreator.jsx';
-import { saveTache, deleteTache, duplicateTache, saveAsModele, remplacerModele, addCommentaire, addTachesToIntervention, affecter, propagerModele } from '../actions.js';
-import { libellePlanification, listeVoyages, nomIntervention, voyageDe, voyageOuvert } from '../../shared/voyages.js';
+import { saveTache, deleteTache, duplicateTache, saveAsModele, remplacerModele, addCommentaire, addTachesToIntervention, propagerModele } from '../actions.js';
+import { affecterAIntervention, bienIntervention, interventionsDuVoyage, libellePlanification, listeVoyages, nomIntervention, voyageDe, voyageOuvert } from '../../shared/voyages.js';
+import { write } from '../db.js';
 import { refTache } from '../../shared/references.js';
 import { diffModele, tachesDuModele } from '../../shared/modeles.js';
 import { ArticleEditor } from './ArticleEditor.jsx';
@@ -43,8 +44,11 @@ export function TacheEditor({ tache, modele = !!tache?.modele, defaultAppartemen
   const prevue = tache && !modele ? planification(tache.id, data) : null;
   const interventionDepart = prevue ?? (interventionId ? data.deplacements.find((d) => d.id === interventionId) : null);
   const voyageDepart = interventionDepart ? voyageDe(interventionDepart, data) : '';
-  const [voyageId, setVoyageId] = useState(voyageDepart);
+  // On choisit l'intervention (le déplacement suit) ; « nouvelle:<voyage> » = intervention du bien à créer.
+  const cibleDepart = interventionDepart?.id ?? '';
+  const [cible, setCible] = useState(cibleDepart);
   const voyagesOuverts = listeVoyages(data).filter((v) => voyageOuvert(v.id, data) || v.id === voyageDepart);
+  const [materielMasque, setMaterielMasque] = useLocalState('fiche-materiel-masque', false);
   // Suivi du temps : tant que la fiche est ouverte, l'écran concerne cette tâche (et son intervention).
   useContexteEcran(3, tache && !modele ? { tache_id: tache.id, intervention_id: interventionDepart?.id ?? null, voyage_id: interventionDepart ? voyageDepart : null, appartement_id: tache.appartement_id ?? null } : { contexte: modele ? 'modeles' : 'nouvelle-tache' });
 
@@ -72,12 +76,12 @@ export function TacheEditor({ tache, modele = !!tache?.modele, defaultAppartemen
     }
     const avecTache = { ...data, taches: [...data.taches.filter((t) => t.id !== id), { ...tache, id, appartement_id: d.appartement_id || null }] };
     if (!modele) {
-      if (!tache && interventionId && voyageId === voyageDepart) {
+      if (!tache && interventionId && cible === cibleDepart) {
         // Tâche créée depuis une intervention : elle y est ajoutée directement.
         await addTachesToIntervention(interventionId, [id], avecTache);
-      } else if (voyageId !== voyageDepart || (tache && (tache.appartement_id || '') !== (d.appartement_id || '') && voyageId)) {
-        // Nouveau déplacement choisi (ou bien changé) : la tâche rejoint l'intervention de son bien.
-        await affecter(id, voyageId || null, avecTache);
+      } else if (cible !== cibleDepart) {
+        // Autre intervention choisie : la tâche y passe (et son déplacement avec).
+        await write(affecterAIntervention(id, cible, avecTache));
       }
     }
     // Tâche type modifiée : proposer de reporter les changements sur les tâches ouvertes du même type.
@@ -194,40 +198,59 @@ export function TacheEditor({ tache, modele = !!tache?.modele, defaultAppartemen
         )}
         {!modele && (
           <label className="block">
-            <span className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-400">🚐 Déplacement</span>
-            <select className="w-full" value={voyageId} onChange={(e) => setVoyageId(e.target.value)}>
+            <span className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-400">🏠 Intervention</span>
+            <select
+              className="w-full"
+              value={cible}
+              onChange={(e) => {
+                const v = e.target.value;
+                setCible(v);
+                // L'intervention a un bien : la tâche prend ce bien.
+                const i = data.deplacements.find((x) => x.id === v);
+                const b = i && bienIntervention(i, data);
+                if (b) setAppartementId(b);
+              }}
+            >
               <option value="">— Pas encore planifiée —</option>
-              {voyagesOuverts.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.nom}
-                  {v.date_debut ? ` (${new Date(`${v.date_debut}T00:00`).toLocaleDateString('fr-FR')})` : ''}
-                </option>
-              ))}
+              {voyagesOuverts.map((v) => {
+                const its = interventionsDuVoyage(v.id, data).filter((i) => i.statut !== 'termine' || i.id === cibleDepart);
+                const aBien = !appartementId || its.some((i) => bienIntervention(i, data) === appartementId);
+                return (
+                  <optgroup key={v.id} label={`🚐 ${v.nom}${v.date_debut ? ` (${new Date(`${v.date_debut}T00:00`).toLocaleDateString('fr-FR')})` : ''}`}>
+                    {its.map((i) => (
+                      <option key={i.id} value={i.id}>
+                        {nomIntervention(i, data)}
+                      </option>
+                    ))}
+                    {!aBien && <option value={`nouvelle:${v.id}`}>＋ Nouvelle intervention : {data.appartements.find((x) => x.id === appartementId)?.nom}</option>}
+                  </optgroup>
+                );
+              })}
             </select>
-            {prevue && voyageId === voyageDepart && <span className="mt-1 block text-xs text-slate-500">Intervention : {libellePlanification(prevue, data)} ({STATUTS[prevue.statut]})</span>}
+            {prevue && cible === cibleDepart && <span className="mt-1 block text-xs text-slate-500">{libellePlanification(prevue, data)} ({STATUTS[prevue.statut]})</span>}
           </label>
         )}
         {!modele && (
-          <label className="block">
-            <span className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-400">Date d'échéance</span>
-            <div className="flex gap-2">
-              <input type="date" className="min-w-0 flex-1" value={echeance ?? ''} onChange={(e) => setEcheance(e.target.value)} />
-              {echeance && <Button variant="ghost" icon="x" aria-label="Effacer la date" className="!px-2" onClick={() => setEcheance('')} />}
-            </div>
-          </label>
-        )}
-        {!modele && (
-          <label className="block">
-            <span className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-400">Bien</span>
-            <select className="w-full" value={appartementId ?? ''} onChange={(e) => setAppartementId(e.target.value)}>
-              <option value="">—</option>
-              {data.appartements.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.nom}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div className="grid grid-cols-2 gap-2">
+            <label className="block min-w-0">
+              <span className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-400">Échéance</span>
+              <div className="flex gap-1">
+                <input type="date" className="min-w-0 flex-1 !px-2" value={echeance ?? ''} onChange={(e) => setEcheance(e.target.value)} />
+                {echeance && <Button variant="ghost" icon="x" aria-label="Effacer la date" className="!min-w-8 !px-1" onClick={() => setEcheance('')} />}
+              </div>
+            </label>
+            <label className="block min-w-0">
+              <span className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-400">Bien</span>
+              <select className="w-full" value={appartementId ?? ''} onChange={(e) => setAppartementId(e.target.value)}>
+                <option value="">—</option>
+                {data.appartements.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.nom}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
         )}
         <label className="block">
           <span className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-400">Description</span>
@@ -247,7 +270,12 @@ export function TacheEditor({ tache, modele = !!tache?.modele, defaultAppartemen
           </form>
         </div>
 
-        <ArticlePicker links={links} setLinks={setLinks} />
+        <button type="button" onClick={() => setMaterielMasque(!materielMasque)} aria-expanded={!materielMasque} className="flex min-h-10 w-full items-center gap-2 rounded-xl bg-slate-100 px-3 text-left text-sm font-semibold dark:bg-slate-800">
+          🧰 Outillage et matériel ({links.length})
+          <span className="ml-auto font-normal text-slate-500">{materielMasque ? 'Afficher' : 'Masquer'}</span>
+          <Icon name="chevron" className={`size-4 text-slate-400 transition-transform ${materielMasque ? '' : 'rotate-90'}`} />
+        </button>
+        {!materielMasque && <ArticlePicker links={links} setLinks={setLinks} />}
 
         {tache && !modele && (
           <section className="space-y-2">

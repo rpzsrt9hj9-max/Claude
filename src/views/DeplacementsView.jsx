@@ -17,11 +17,12 @@ import { ACTIVITES, ORDRE_ACTIVITES, duree, formatDuree } from '../../shared/tem
 import { estimerDeplacement, tempsTache } from '../../shared/estimations.js';
 import { formatEstimation } from '../components/Chrono.jsx';
 import { CLASSEMENTS_INTERVENTIONS, classerInterventions } from '../../shared/classement.js';
-import { lignesDescription } from '../../shared/interventions.js';
+import { lignesDescription, planification } from '../../shared/interventions.js';
 import { refIntervention, refTache, refVoyage } from '../../shared/references.js';
 import { useReglages } from '../reglages.js';
 import { AAcheterView } from './AAcheterView.jsx';
-import { dateCourte } from './BacklogView.jsx';
+import { LigneTache, dateCourte } from './BacklogView.jsx';
+import { TacheEditor } from './TacheEditor.jsx';
 import { CommentaireItem, ListeCommentaires, NouveauCommentaire, Photo, dateHeure } from '../components/Commentaires.jsx';
 import { TachesView } from './TachesView.jsx';
 import { ArticlesView } from './ArticlesView.jsx';
@@ -411,7 +412,7 @@ export function InterventionDetail({ voyage, dep, onBack }) {
   const trip = useMemo(() => computeTrip(voyage.id, data, taches), [voyage.id, data, taches]);
   const sortie = useMemo(() => computeTrip(cleSortie(dep.id), data, taches), [dep.id, data, taches]);
   const ctx = useMemo(() => ({ ...parent, dep, depId: voyage.id, interventionId: dep.id, voyage, trip, ctxChrono: { voyage_id: voyage.id, intervention_id: dep.id, appartement_id: bienIntervention(dep, parent.data) } }), [parent, dep, voyage, trip]);
-  const ongletActif = ['taches', 'sortir', 'acheter', 'recap'].includes(onglet) ? onglet : 'taches';
+  const ongletActif = ['taches', 'sortir', 'acheter', 'constats', 'recap'].includes(onglet) ? onglet : 'taches';
   const { dense } = useReglages();
   const ctxChrono = { voyage_id: voyage.id, intervention_id: dep.id, appartement_id: bienIntervention(dep, data) };
   useContexteEcran(2, { ...ctxChrono, ecran: ongletActif === 'sortir' ? 'sortir' : ongletActif });
@@ -444,7 +445,7 @@ export function InterventionDetail({ voyage, dep, onBack }) {
           <Button variant="ghost" icon="edit" className="!px-2 text-slate-400" aria-label="Renommer l'intervention" onClick={() => setReglages(true)} />
         </div>
         <Onglets
-          onglets={[['taches', 'Tâches'], ['sortir', 'À sortir'], ['acheter', '🛒 À acheter'], ['recap', 'Récap']]}
+          onglets={[['taches', 'Tâches'], ['sortir', 'À sortir'], ['acheter', '🛒 À acheter'], ['constats', '📝 État des lieux'], ['recap', 'Récap']]}
           valeur={ongletActif}
           onChange={setOnglet}
           badges={{ sortir: sortie.items.filter((i) => !i.status.complet).length, acheter: trip.items.filter((i) => i.article.a_acheter).length }}
@@ -459,6 +460,7 @@ export function InterventionDetail({ voyage, dep, onBack }) {
           </div>
         )}
         {ongletActif === 'acheter' && <AAcheterView />}
+        {ongletActif === 'constats' && <EtatDesLieux />}
         {ongletActif === 'recap' && <RecapView onImprimer={imprimerRapport} />}
       </div>
       {reglages && <ReglagesIntervention dep={dep} onClose={() => setReglages(false)} onDeleted={onBack} />}
@@ -643,6 +645,7 @@ function RapportImprimable() {
   const resultat = (t) => (data.intervention_taches || []).find((l) => l.intervention_id === dep.id && l.tache_id === t.id)?.resultat || statutTache(t);
   const garder = (liste) => liste.filter(dansRapport).map((c) => ({ ...c, photos: c.photos.filter(dansRapport) })).filter((c) => c.texte || c.photos.length);
   const compteRendu = garder(r.compteRendu);
+  const constats = garder(r.constats);
   const parTache = r.parTache.map((g) => ({ ...g, commentaires: garder(g.commentaires) }));
   const bloc = (c) => (
     <div key={c.id} className="mb-2 break-inside-avoid">
@@ -704,6 +707,25 @@ function RapportImprimable() {
           ))}
         </div>
       )}
+      {(constats.length > 0 || r.aPrevoir.length > 0) && (
+        <div className="mb-4">
+          <h2 className="mb-1 border-b border-black text-lg font-bold">État des lieux</h2>
+          {constats.map(bloc)}
+          {r.aPrevoir.length > 0 && (
+            <>
+              <h3 className="mt-2 font-bold">À prévoir</h3>
+              <ul>
+                {r.aPrevoir.map((t) => (
+                  <li key={t.id} className="py-0.5">
+                    {statutTache(t) === 'terminee' ? '☑' : '☐'} {t.titre}
+                    {t.ref ? <span className="text-xs text-gray-600"> {refTache(t)}</span> : null}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
+      )}
       {compteRendu.length > 0 && (
         <>
           <h2 className="mb-1 border-b border-black text-lg font-bold">Compte rendu</h2>
@@ -748,5 +770,51 @@ function EstimationDeplacement({ taches, biens }) {
         </span>
       )}
     </p>
+  );
+}
+
+/** État des lieux : ce que l'on a vu sur place (constats, photos) et les tâches à prévoir pour la suite. */
+function EtatDesLieux() {
+  const { data, dep } = useData();
+  const r = recap(dep.id, data);
+  const bien = bienIntervention(dep, data);
+  const [titre, setTitre] = useState('');
+  const [ouverte, setOuverte] = useState(null);
+  const ajouter = async () => {
+    if (!titre.trim()) return;
+    await A.prevoirTache(titre, dep.id, bien);
+    setTitre('');
+  };
+  const ouverteTache = ouverte && data.taches.find((t) => t.id === ouverte);
+  return (
+    <div className="space-y-5">
+      <p className="rounded-xl bg-slate-100 p-2 text-sm text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+        Ce que tu as vu sur place, et ce qu’il faudra faire ensuite. Les tâches à prévoir vont dans la liste des tâches (non planifiées) pour un prochain déplacement.
+      </p>
+      <section className="space-y-2">
+        <h2 className="text-lg font-bold">🔎 Constats</h2>
+        <NouveauCommentaire interventionId={dep.id} genre="constat" placeholder="J’ai vu… (état, usure, problème, photo)" />
+        <ListeCommentaires commentaires={[...r.constats].reverse()} choixRapport />
+      </section>
+      <section className="space-y-2">
+        <h2 className="text-lg font-bold">📋 À prévoir ({r.aPrevoir.length})</h2>
+        <form
+          className="flex gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            ajouter();
+          }}
+        >
+          <TextField className="min-w-0 flex-1" value={titre} onChange={setTitre} placeholder="Tâche à prévoir (ex. : refaire le joint de douche)" aria-label="Tâche à prévoir" />
+          <Button type="submit" variant="primary" icon="plus" aria-label="Ajouter la tâche à prévoir" className="!px-3" disabled={!titre.trim()} />
+        </form>
+        <ul className="space-y-1">
+          {r.aPrevoir.map((t) => (
+            <LigneTache key={t.id} tache={t} app={data.appartements.find((a) => a.id === t.appartement_id)} intervention={planification(t.id, data)} onOpen={() => setOuverte(t.id)} dense />
+          ))}
+        </ul>
+      </section>
+      {ouverteTache && <TacheEditor key={ouverte} tache={ouverteTache} onClose={() => setOuverte(null)} onOpen={setOuverte} />}
+    </div>
   );
 }

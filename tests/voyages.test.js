@@ -153,3 +153,20 @@ describe('tâches types', () => {
     expect(liens.find((l) => l.article_id === 'vis').quantite).toBe(5);
   });
 });
+
+import { affecterAIntervention } from '../shared/voyages.js';
+describe('v5.2 : tâche rattachée à une intervention', () => {
+  it('changer d’intervention retire la tâche de l’ancienne et l’ajoute à la nouvelle (donc à son déplacement)', () => {
+    let d = base();
+    const v1 = creerVoyage({ nom: 'Pau' }, ['a1'], d);
+    d = applyWrites(d, v1.writes);
+    const v2 = creerVoyage({ nom: 'Toulouse' }, ['b1'], d);
+    d = applyWrites(d, v2.writes);
+    const cible = interventionsDuVoyage(v2.id, d)[0];
+    d = applyWrites(d, affecterAIntervention('a1', cible.id, d));
+    expect(planification('a1', d).id).toBe(cible.id);
+    expect(affecterAIntervention('a1', cible.id, d)).toEqual([]);
+    d = applyWrites(d, affecterAIntervention('a1', '', d));
+    expect(planification('a1', d)).toBeNull();
+  });
+});

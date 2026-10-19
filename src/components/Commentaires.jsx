@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useData } from '../data.js';
-import { urlPhoto } from '../db.js';
+import { update, urlPhoto } from '../db.js';
 import { addCommentaire, deleteCommentaire, setDansRapport } from '../actions.js';
 import { dansRapport } from '../../shared/interventions.js';
 import { observation } from '../supabase.js';
-import { Button, Icon, MicButton } from './ui.jsx';
+import { Button, Icon, MicButton, TextField } from './ui.jsx';
 
 export const dateHeure = (ms) =>
   new Date(ms).toLocaleString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
@@ -70,6 +70,7 @@ function auteurDe(user) {
 
 export function CommentaireItem({ c, titre, onDelete, choixRapport }) {
   const [vue, setVue] = useState(null);
+  const [edition, setEdition] = useState(null); // texte en cours de modification
   const exclu = choixRapport && !dansRapport(c);
   return (
     <li className={`rounded-2xl bg-white p-3 shadow-sm dark:bg-slate-900 ${exclu ? 'opacity-60' : ''}`}>
@@ -81,13 +82,40 @@ export function CommentaireItem({ c, titre, onDelete, choixRapport }) {
           {titre ? ` · ${titre}` : ''}
         </span>
         {choixRapport && <CaseRapport table="commentaires" objet={c} />}
+        {edition === null && (
+          <button type="button" className="flex size-9 items-center justify-center rounded-lg text-slate-400 active:bg-slate-100 dark:active:bg-slate-800" aria-label="Modifier le commentaire" onClick={() => setEdition(c.texte ?? '')}>
+            <Icon name="edit" className="size-4" />
+          </button>
+        )}
         {onDelete && (
           <button type="button" className="flex size-9 items-center justify-center rounded-lg text-slate-400 active:bg-slate-100 dark:active:bg-slate-800" aria-label="Supprimer le commentaire" onClick={onDelete}>
             <Icon name="trash" className="size-4" />
           </button>
         )}
       </div>
-      {c.texte && <p className="whitespace-pre-wrap break-words">{c.texte}</p>}
+      {edition !== null ? (
+        <div className="space-y-2">
+          <TextField multiline value={edition} onChange={setEdition} autoFocus aria-label="Texte du commentaire" />
+          <div className="flex gap-2">
+            <Button
+              variant="primary"
+              icon="check"
+              className="flex-1"
+              onClick={async () => {
+                await update('commentaires', c.id, { texte: edition.trim() || null });
+                setEdition(null);
+              }}
+            >
+              Enregistrer
+            </Button>
+            <Button variant="ghost" onClick={() => setEdition(null)}>
+              Annuler
+            </Button>
+          </div>
+        </div>
+      ) : (
+        c.texte && <p className="whitespace-pre-wrap break-words">{c.texte}</p>
+      )}
       {c.photos.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-2">
           {c.photos.map((p) =>
@@ -108,7 +136,7 @@ export function CommentaireItem({ c, titre, onDelete, choixRapport }) {
 }
 
 /** Zone de saisie d'un commentaire horodaté, avec photos (appareil photo ou galerie). */
-export function NouveauCommentaire({ tacheId = null, interventionId = null, placeholder = 'Ajouter un commentaire…' }) {
+export function NouveauCommentaire({ tacheId = null, interventionId = null, placeholder = 'Ajouter un commentaire…', genre = null }) {
   const { data, user } = useData();
   const [texte, setTexte] = useState('');
   const [fichiers, setFichiers] = useState([]);
@@ -121,7 +149,7 @@ export function NouveauCommentaire({ tacheId = null, interventionId = null, plac
     if (!texte.trim() && !fichiers.length) return;
     setEnvoi(true);
     try {
-      await addCommentaire({ tacheId, interventionId, texte, fichiers, auteur: auteurDe(user) }, data);
+      await addCommentaire({ tacheId, interventionId, texte, fichiers, auteur: auteurDe(user), genre }, data);
       setTexte('');
       setFichiers([]);
     } finally {

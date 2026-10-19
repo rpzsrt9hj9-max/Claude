@@ -1,6 +1,17 @@
 // Journal des versions affiché dans l'appli (Plus → Nouveautés) ; même contenu que CHANGELOG.md.
 export const NOUVEAUTES = [
   {
+    version: 'v5.2',
+    date: '2026-10-19',
+    titre: 'État des lieux, commentaires modifiables',
+    points: [
+      'Intervention : nouvel onglet « 📝 État des lieux » : constats (texte, photos) et tâches « à prévoir », créées pour le bien de l’intervention et rangées dans la liste des tâches (non planifiées). Le tout apparaît dans le rapport.',
+      'Commentaires modifiables (crayon).',
+      'Fiche tâche : « Outillage et matériel » se masque d’un toucher (mémorisé) ; échéance et bien sur la même ligne.',
+      'Fiche tâche : on choisit l’intervention (et non plus le déplacement) ; le déplacement suit. Une intervention peut être créée pour le bien de la tâche dans un déplacement.',
+    ],
+  },
+  {
     version: 'v5.1',
     date: '2026-10-19',
     titre: 'Temps au rapport et estimations',
