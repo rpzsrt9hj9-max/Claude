@@ -21,7 +21,7 @@ import { Etapes } from '../components/Etapes.jsx';
 import { CommentairesParIntervention, NouveauCommentaire } from '../components/Commentaires.jsx';
 import { STATUTS } from '../../shared/schema.js';
 
-const COULEUR_STATUT = { a_traiter: 'bg-sky-600 text-white', en_cours: 'bg-violet-600 text-white', reportee: 'bg-amber-500 text-white', terminee: 'bg-emerald-600 text-white' };
+const COULEUR_STATUT = { a_traiter: 'bg-sky-600 text-white', en_cours: 'bg-violet-600 text-white', reportee: 'bg-amber-500 text-white', terminee: 'bg-emerald-600 text-white', annulee: 'bg-slate-600 text-white' };
 
 /**
  * Création / édition d'une tâche (ou d'une tâche type si modele = true) avec ses articles.
@@ -69,7 +69,7 @@ export function TacheEditor({ tache, modele = !!tache?.modele, defaultAppartemen
     const d = draft();
     const id = await saveTache(d, existingLinks, 0);
     // Reportée maintenant : trace dans les commentaires (pour l'historique).
-    if (tache && !modele && d.statut === 'reportee' && statutTache(tache) !== 'reportee') await noterReport(tache, data, prevue);
+    if (tache && !modele && (d.statut === 'reportee' || d.statut === 'annulee') && statutTache(tache) !== d.statut) await noterReport(tache, data, prevue, d.statut);
     // Tâche en cours : un article ajouté maintenant manquait ; c'est noté dans le compte rendu.
     if (tache && !modele && d.statut === 'en_cours') {
       const avant = new Set(existingLinks.map((l) => l.article_id));
@@ -166,7 +166,7 @@ export function TacheEditor({ tache, modele = !!tache?.modele, defaultAppartemen
           <TextField value={titre} onChange={setTitre} placeholder="Ex. : Fixer le cadre" autoFocus={!tache} />
         </label>
         {!modele && (
-          <div className="grid grid-cols-4 gap-1 rounded-2xl bg-slate-200 p-1 dark:bg-slate-800" role="radiogroup" aria-label="Statut">
+          <div className="grid grid-cols-5 gap-1 rounded-2xl bg-slate-200 p-1 dark:bg-slate-800" role="radiogroup" aria-label="Statut">
             {STATUT_ORDER.map((s) => (
               <button
                 key={s}
@@ -174,7 +174,7 @@ export function TacheEditor({ tache, modele = !!tache?.modele, defaultAppartemen
                 role="radio"
                 aria-checked={statut === s}
                 onClick={() => setStatut(s)}
-                className={`min-h-11 rounded-xl px-0.5 text-[13px] leading-tight font-semibold ${statut === s ? COULEUR_STATUT[s] : 'text-slate-600 dark:text-slate-300'}`}
+                className={`min-h-11 rounded-xl px-0.5 text-xs leading-tight font-semibold ${statut === s ? COULEUR_STATUT[s] : 'text-slate-600 dark:text-slate-300'}`}
               >
                 {STATUTS_TACHE[s]}
               </button>
@@ -185,7 +185,7 @@ export function TacheEditor({ tache, modele = !!tache?.modele, defaultAppartemen
           <p className="text-sm text-slate-500">
             {tache.ref ? <b className="font-semibold text-slate-600 dark:text-slate-300">{refTache(tache)} · </b> : null}
             Créée le {new Date(tache.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
-            {statut !== 'terminee' && ` · ouverte depuis ${ouverteDepuis(tache.created_at)}`}
+            {statut !== 'terminee' && statut !== 'annulee' && ` · ouverte depuis ${ouverteDepuis(tache.created_at)}`}
           </p>
         )}
         {tache && (tempsTache(tache.id, data) > 0 || estimerTache(tache, data)) && (

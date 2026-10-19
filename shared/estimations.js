@@ -79,7 +79,7 @@ export function estimerDeplacement(taches, biens, data) {
   let surPlace = 0;
   const sansEstimation = [];
   for (const t of taches) {
-    if (t.statut === 'terminee') continue;
+    if (t.statut === 'terminee' || t.statut === 'annulee') continue;
     const e = estimerTache(t, data, index);
     if (e) surPlace += e.mediane;
     else sansEstimation.push(t);

@@ -36,7 +36,7 @@ export function TachesView() {
   }, [trip, data.appartements]);
   const filtreActif = appsUsed.some((a) => a.id === filtre) ? filtre : '';
 
-  const visible = trip.taches.filter((t) => (!filtreActif || t.tache.appartement_id === filtreActif) && (!masquerFaites || statutTache(t.tache) !== 'terminee'));
+  const visible = trip.taches.filter((t) => (!filtreActif || t.tache.appartement_id === filtreActif) && (!masquerFaites || !['terminee', 'annulee'].includes(statutTache(t.tache))));
   const groups = useMemo(() => {
     const m = new Map();
     for (const t of visible) {
@@ -49,8 +49,9 @@ export function TachesView() {
 
   const nbPretes = trip.taches.filter((t) => t.prete).length;
   const nbFaites = trip.taches.filter((t) => statutTache(t.tache) === 'terminee').length;
+  const nbAnnulees = trip.taches.filter((t) => statutTache(t.tache) === 'annulee').length;
   const indexEstim = useMemo(() => indexTaches(data), [data]);
-  const surPlace = trip.taches.filter((t) => statutTache(t.tache) !== 'terminee').reduce((s, t) => s + (estimerTache(t.tache, data, indexEstim)?.mediane ?? 0), 0);
+  const surPlace = trip.taches.filter((t) => !['terminee', 'annulee', 'reportee'].includes(statutTache(t.tache))).reduce((s, t) => s + (estimerTache(t.tache, data, indexEstim)?.mediane ?? 0), 0);
 
   const quickAdd = async () => {
     if (!quick.trim()) return;
@@ -63,6 +64,11 @@ export function TachesView() {
     <div className={dense ? 'space-y-2' : 'space-y-4'}>
       <div className="flex flex-wrap gap-x-1.5 text-sm text-slate-600 dark:text-slate-400 [&>span]:whitespace-nowrap">
         <span>{trip.taches.length} tâches</span>·<span className="text-emerald-700 dark:text-emerald-400">{nbPretes} prêtes</span>·<span>{nbFaites} terminées</span>
+        {nbAnnulees > 0 && (
+          <>
+            ·<span>{nbAnnulees} annulée{nbAnnulees > 1 ? 's' : ''}</span>
+          </>
+        )}
         {surPlace > 0 && (
           <>
             ·<span>sur place ≈ {formatDuree(surPlace)}</span>
@@ -184,7 +190,7 @@ function TacheRow({ info, onOpen, onRetirer, onSupprimer, dense }) {
   );
   const { tache, prete, byType } = info;
   const statut = statutTache(tache);
-  const fait = statut === 'terminee';
+  const fait = statut === 'terminee' || statut === 'annulee';
   // Fonds opaques : la couleur du glissement apparaît dessous.
   const tone = fait ? 'bg-slate-100 dark:bg-slate-900' : prete ? 'bg-emerald-50 ring-2 ring-inset ring-emerald-500/60 dark:bg-emerald-950' : 'bg-white dark:bg-slate-900';
   const pastilles = TYPE_ORDER.map((type) => {
@@ -209,11 +215,12 @@ function TacheRow({ info, onOpen, onRetirer, onSupprimer, dense }) {
             <span className="truncate">{tache.titre}</span>
           </span>
           {temps}
-          {(tache.echeance || statut === 'reportee' || statut === 'en_cours') && (
+          {(tache.echeance || statut === 'reportee' || statut === 'en_cours' || statut === 'annulee') && (
             <span className="block truncate text-xs text-slate-500">
               {tache.echeance && <span className={enRetard(tache) ? 'font-bold text-red-600' : ''}>📅 {dateCourte(tache.echeance)}</span>}
               {statut === 'reportee' && <span className="font-semibold text-amber-600"> · {STATUTS_TACHE.reportee}</span>}
               {statut === 'en_cours' && <span className="font-semibold text-violet-600"> · {STATUTS_TACHE.en_cours}</span>}
+              {statut === 'annulee' && <span className="font-semibold text-slate-500"> · ⊘ Annulée (pas nécessaire)</span>}
             </span>
           )}
           <span className="mt-0.5 hidden flex-wrap gap-1 sm:flex">{pastilles}</span>
@@ -233,6 +240,7 @@ function TacheRow({ info, onOpen, onRetirer, onSupprimer, dense }) {
             {tache.echeance && <span className={`text-xs ${enRetard(tache) ? 'font-bold text-red-600' : 'text-slate-500'}`}>📅 {dateCourte(tache.echeance)}</span>}
             {statut === 'reportee' && <span className="text-xs font-semibold text-amber-600">{STATUTS_TACHE.reportee}</span>}
             {statut === 'en_cours' && <span className="text-xs font-semibold text-violet-600">{STATUTS_TACHE.en_cours}</span>}
+            {statut === 'annulee' && <span className="text-xs font-semibold text-slate-500">⊘ Annulée (pas nécessaire)</span>}
             {pastilles}
             {!fait && prete && <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400">✓ Prête</span>}
             {temps}

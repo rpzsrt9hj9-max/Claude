@@ -4,14 +4,18 @@
 
 import { interventionTacheId } from './schema.js';
 
-export const STATUTS_TACHE = { a_traiter: 'À traiter', en_cours: 'En cours', reportee: 'Reportée', terminee: 'Terminée' };
-export const STATUT_ORDER = ['a_traiter', 'en_cours', 'reportee', 'terminee'];
+export const STATUTS_TACHE = { a_traiter: 'À traiter', en_cours: 'En cours', reportee: 'Reportée', terminee: 'Terminée', annulee: 'Annulée' };
+export const STATUT_ORDER = ['a_traiter', 'en_cours', 'reportee', 'terminee', 'annulee'];
 // À la clôture d'une intervention, une tâche finit terminée, reportée ou à traiter.
-export const STATUTS_CLOTURE = ['a_traiter', 'reportee', 'terminee'];
+export const STATUTS_CLOTURE = ['a_traiter', 'reportee', 'terminee', 'annulee'];
 
 /** Statut d'une tâche, y compris pour les anciennes lignes qui n'avaient que `fait`. */
 export const statutTache = (t) => t.statut || (t.fait ? 'terminee' : 'a_traiter');
 export const estTerminee = (t) => statutTache(t) === 'terminee';
+/** Close : terminée, ou annulée parce qu'elle n'était pas nécessaire. */
+export const estClose = (t) => statutTache(t) === 'terminee' || statutTache(t) === 'annulee';
+/** Plus de matériel à prendre ni à sortir : reportée sur place, ou annulée. */
+export const sansMateriel = (t) => t.statut === 'reportee' || t.statut === 'annulee';
 export const interventionOuverte = (i) => i && i.statut !== 'termine';
 
 /** Date du jour au format AAAA-MM-JJ (heure locale). */
@@ -20,7 +24,7 @@ export function aujourdhui(d = new Date()) {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
-export const enRetard = (t, jour = aujourdhui()) => !!t.echeance && !estTerminee(t) && t.echeance < jour;
+export const enRetard = (t, jour = aujourdhui()) => !!t.echeance && !estClose(t) && t.echeance < jour;
 
 /** Tâches « normales » (hors tâches types). */
 export const tachesGenerales = (data) => data.taches.filter((t) => !t.modele);
@@ -80,7 +84,7 @@ export function candidats(interventionId, data, filtres = {}) {
   const libres = [];
   const ailleurs = [];
   for (const t of tachesGenerales(data)) {
-    if (estTerminee(t) || deja.has(t.id)) continue;
+    if (estClose(t) || deja.has(t.id)) continue;
     if (apps.size && !apps.has(t.appartement_id || '')) continue;
     if (filtres.echeanceMax && t.echeance && t.echeance > filtres.echeanceMax) continue;
     if (filtres.echeanceMax && !t.echeance && filtres.sansEcheance === false) continue;
@@ -131,7 +135,7 @@ export function retirerTache(interventionId, tacheId, data, tousLiens = liens(da
 export function propositionCloture(interventionId, data) {
   return tachesIntervention(interventionId, data).map((t) => ({
     tache: t,
-    statut: estTerminee(t) ? 'terminee' : 'reportee',
+    statut: estClose(t) ? statutTache(t) : 'reportee',
   }));
 }
 

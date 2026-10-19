@@ -2,6 +2,12 @@
 
 Même contenu que la page « Nouveautés » de l'appli (Plus → Nouveautés). Les versions précédentes restent en ligne : /Claude/deplacements/vN/.
 
+## v5.5 — Tâche annulée (19/10/2026)
+
+- Nouveau statut « Annulée » (tâche prévue, finalement pas nécessaire) : dans la fiche tâche et à la clôture.
+- Une tâche annulée sort son matériel de À prendre, Charger et À sortir (moins de choses à monter), n’est plus « à faire » ni en retard, et n’est plus proposée pour un déplacement.
+- Trace automatique « ⊘ Annulée le … : pas nécessaire » ; dans le rapport : « ⊘ … – Annulée (pas nécessaire) ». Filtre « Terminées / annulées » dans la liste des tâches.
+
 ## v5.4 — Tâches reportées et historique (19/10/2026)
 
 - Reporter une tâche (sur place ou à la clôture) ajoute un commentaire automatique « ↪ Reportée le … (déplacement › bien) ». Sur place, la tâche reste dans l’intervention, marquée « Reportée », mais son matériel sort de À prendre, Charger et À sortir.

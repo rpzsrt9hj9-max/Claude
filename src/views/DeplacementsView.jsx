@@ -594,7 +594,7 @@ function Cloture({ onClose }) {
           Vérifie le résultat de chaque tâche. Les tâches reportées restent dans la liste et pourront entrer dans un prochain déplacement.
         </p>
         <p className="text-sm font-semibold">
-          {nb('terminee')} terminée(s) · {nb('reportee')} reportée(s) · {nb('a_traiter')} à traiter
+          {nb('terminee')} terminée(s) · {nb('reportee')} reportée(s) · {nb('annulee')} annulée(s) · {nb('a_traiter')} à traiter
         </p>
         {choix.length === 0 && <Empty>Aucune tâche dans cette intervention.</Empty>}
         {groupes.map((g) => (
@@ -606,14 +606,14 @@ function Cloture({ onClose }) {
               {g.lignes.map((c) => (
                 <li key={c.tache.id} className="space-y-2 rounded-2xl bg-white p-3 shadow-sm dark:bg-slate-900">
                   <p className="font-semibold break-words">{c.tache.titre}</p>
-                  <div className="grid grid-cols-3 gap-1 rounded-xl bg-slate-200 p-1 dark:bg-slate-800">
+                  <div className="grid grid-cols-4 gap-1 rounded-xl bg-slate-200 p-1 dark:bg-slate-800">
                     {STATUTS_CLOTURE.map((s) => (
                       <button
                         key={s}
                         type="button"
                         aria-pressed={c.statut === s}
                         onClick={() => setChoix((l) => l.map((x, j) => (j === c.i ? { ...x, statut: s } : x)))}
-                        className={`min-h-11 rounded-lg text-sm font-semibold ${c.statut === s ? (s === 'terminee' ? 'bg-emerald-600 text-white' : s === 'reportee' ? 'bg-amber-500 text-white' : 'bg-sky-600 text-white') : 'text-slate-600 dark:text-slate-300'}`}
+                        className={`min-h-11 rounded-lg text-xs font-semibold ${c.statut === s ? (s === 'terminee' ? 'bg-emerald-600 text-white' : s === 'reportee' ? 'bg-amber-500 text-white' : s === 'annulee' ? 'bg-slate-600 text-white' : 'bg-sky-600 text-white') : 'text-slate-600 dark:text-slate-300'}`}
                       >
                         {STATUTS_TACHE[s]}
                       </button>
@@ -678,8 +678,8 @@ function RapportImprimable() {
           return (
             <li key={tache.id} className="break-inside-avoid py-1">
               <p>
-                {resultat(tache) === 'terminee' ? '☑' : '☐'} <b>{tache.titre}</b>
-                {tache.ref ? <span className="text-xs text-gray-600"> {refTache(tache)}</span> : null} – {STATUTS_TACHE[resultat(tache)]}
+                {resultat(tache) === 'terminee' ? '☑' : resultat(tache) === 'annulee' ? '⊘' : '☐'} <b>{tache.titre}</b>
+                {tache.ref ? <span className="text-xs text-gray-600"> {refTache(tache)}</span> : null} – {resultat(tache) === 'annulee' ? 'Annulée (pas nécessaire)' : STATUTS_TACHE[resultat(tache)]}
                 {tempsAuRapport && tTache(tache) > 0 && <span className="text-sm"> · ⏱ {formatDuree(tTache(tache))}</span>}
               </p>
               {avant.length > 0 && <p className="ml-6 text-xs text-gray-600">↪ Déjà reportée {avant.length}× ({avant.map((i) => libellePlanification(i, data)).join(', ')})</p>}

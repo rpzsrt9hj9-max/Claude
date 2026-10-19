@@ -1,6 +1,16 @@
 // Journal des versions affiché dans l'appli (Plus → Nouveautés) ; même contenu que CHANGELOG.md.
 export const NOUVEAUTES = [
   {
+    version: 'v5.5',
+    date: '2026-10-19',
+    titre: 'Tâche annulée',
+    points: [
+      'Nouveau statut « Annulée » (tâche prévue, finalement pas nécessaire) : dans la fiche tâche et à la clôture.',
+      'Une tâche annulée sort son matériel de À prendre, Charger et À sortir (moins de choses à monter), n’est plus « à faire » ni en retard, et n’est plus proposée pour un déplacement.',
+      'Trace automatique « ⊘ Annulée le … : pas nécessaire » ; dans le rapport : « ⊘ … – Annulée (pas nécessaire) ». Filtre « Terminées / annulées » dans la liste des tâches.',
+    ],
+  },
+  {
     version: 'v5.4',
     date: '2026-10-19',
     titre: 'Tâches reportées et historique',

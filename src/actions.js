@@ -85,9 +85,11 @@ export const prevoirTache = (titre, interventionId, appartementId) =>
   insert('taches', { titre: titre.trim(), description: null, appartement_id: appartementId || null, statut: 'a_traiter', fait: false, modele: false, deplacement_id: null, ordre: 0, constat_id: interventionId });
 
 /** Trace automatique d'un report : « ↪ Reportée le 19/10/2026 (Pau novembre › Pasteur) ». */
-export async function noterReport(tache, data, intervention = planification(tache.id, data)) {
+export async function noterReport(tache, data, intervention = planification(tache.id, data), statut = 'reportee') {
   const ou = intervention ? ` (${libellePlanification(intervention, data)})` : '';
-  await addCommentaire({ tacheId: tache.id, interventionId: intervention?.id ?? null, texte: `↪ Reportée le ${new Date().toLocaleDateString('fr-FR')}${ou}`, auteur: null }, data);
+  const quand = new Date().toLocaleDateString('fr-FR');
+  const texte = statut === 'annulee' ? `⊘ Annulée le ${quand}${ou} : pas nécessaire` : `↪ Reportée le ${quand}${ou}`;
+  await addCommentaire({ tacheId: tache.id, interventionId: intervention?.id ?? null, texte, auteur: null }, data);
 }
 
 export const setFait = (tache, fait) => update('taches', tache.id, { fait, statut: fait ? 'terminee' : 'a_traiter' });
@@ -260,7 +262,7 @@ export async function closeIntervention(interventionId, choix, data) {
   await write(cloturer(interventionId, choix, data));
   for (const c of choix) {
     const t = data.taches.find((x) => x.id === c.tache_id);
-    if (c.statut === 'reportee' && t && t.statut !== 'reportee') await noterReport(t, data, inter);
+    if ((c.statut === 'reportee' || c.statut === 'annulee') && t && t.statut !== c.statut) await noterReport(t, data, inter, c.statut);
   }
 }
 

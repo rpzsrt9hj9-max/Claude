@@ -236,3 +236,20 @@ describe('v5.4 : reports et historique', () => {
     expect(grouperParIntervention(d.commentaires, d).map((g) => g.interventionId)).toEqual(['I1', 'I2']);
   });
 });
+
+describe('v5.5 : tâche annulée', () => {
+  it('annulée : plus de matériel, pas en retard, pas proposée, gardée à la clôture', async () => {
+    const { propositionCloture, enRetard, candidats } = await import('../shared/interventions.js');
+    const d = data();
+    const tg = d.taches.find((t) => t.id === 'tg');
+    tg.statut = 'annulee';
+    tg.echeance = '2020-01-01';
+    d.deplacements = [];
+    expect(computeTrip('V', d, [tg]).items).toEqual([]);
+    expect(enRetard(tg)).toBe(false);
+    expect(candidats(null, d).libres.some((t) => t.id === 'tg')).toBe(false);
+    d.deplacements = [r({ id: 'I1', appartement_id: 'G', statut: 'en_cours' })];
+    d.intervention_taches = [r({ id: 'I1~tg', intervention_id: 'I1', tache_id: 'tg', ordre: 1 })];
+    expect(propositionCloture('I1', d).map((p) => p.statut)).toEqual(['annulee']);
+  });
+});
