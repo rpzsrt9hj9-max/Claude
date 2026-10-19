@@ -8,7 +8,9 @@ import { useReglages } from '../reglages.js';
 import { ChoixTaches } from './ChoixTaches.jsx';
 import { saveTache, setStatutTache, createFromModeles, addTachesToIntervention, addTachesToVoyage, retirerTacheAnnulable, supprimerTache } from '../actions.js';
 import { Glissable } from '../components/Glissable.jsx';
-import { BoutonTacheChrono } from '../components/Chrono.jsx';
+import { BoutonTacheChrono, formatEstimation } from '../components/Chrono.jsx';
+import { estimerTache, indexTaches, tempsTache } from '../../shared/estimations.js';
+import { formatDuree } from '../../shared/temps.js';
 import { bienIntervention, interventionsDuVoyage } from '../../shared/voyages.js';
 import { TYPES, TYPE_ICON, TYPE_ORDER } from '../../shared/schema.js';
 import { STATUTS_TACHE, enRetard, statutTache } from '../../shared/interventions.js';
@@ -47,6 +49,8 @@ export function TachesView() {
 
   const nbPretes = trip.taches.filter((t) => t.prete).length;
   const nbFaites = trip.taches.filter((t) => statutTache(t.tache) === 'terminee').length;
+  const indexEstim = useMemo(() => indexTaches(data), [data]);
+  const surPlace = trip.taches.filter((t) => statutTache(t.tache) !== 'terminee').reduce((s, t) => s + (estimerTache(t.tache, data, indexEstim)?.mediane ?? 0), 0);
 
   const quickAdd = async () => {
     if (!quick.trim()) return;
@@ -57,8 +61,13 @@ export function TachesView() {
 
   return (
     <div className={dense ? 'space-y-2' : 'space-y-4'}>
-      <div className="flex gap-2 text-sm text-slate-600 dark:text-slate-400">
+      <div className="flex flex-wrap gap-x-1.5 text-sm text-slate-600 dark:text-slate-400 [&>span]:whitespace-nowrap">
         <span>{trip.taches.length} tâches</span>·<span className="text-emerald-700 dark:text-emerald-400">{nbPretes} prêtes</span>·<span>{nbFaites} terminées</span>
+        {surPlace > 0 && (
+          <>
+            ·<span>sur place ≈ {formatDuree(surPlace)}</span>
+          </>
+        )}
       </div>
 
       {ouverte && (
@@ -163,7 +172,16 @@ export function TachesView() {
 }
 
 function TacheRow({ info, onOpen, onRetirer, onSupprimer, dense }) {
-  const { ctxChrono } = useData();
+  const { ctxChrono, data } = useData();
+  const passe = tempsTache(info.tache.id, data);
+  const estim = estimerTache(info.tache, data);
+  const temps = (passe > 0 || estim) && (
+    <span className="text-xs text-slate-500">
+      {passe > 0 && `⏱ ${formatDuree(passe)}`}
+      {passe > 0 && estim ? ' / ' : ''}
+      {estim && formatEstimation(estim, true)}
+    </span>
+  );
   const { tache, prete, byType } = info;
   const statut = statutTache(tache);
   const fait = statut === 'terminee';
@@ -190,6 +208,7 @@ function TacheRow({ info, onOpen, onRetirer, onSupprimer, dense }) {
             {!fait && prete && <span className="size-2.5 shrink-0 rounded-full bg-emerald-500" title="Prête" aria-label="Prête" />}
             <span className="truncate">{tache.titre}</span>
           </span>
+          {temps}
           {(tache.echeance || statut === 'reportee' || statut === 'en_cours') && (
             <span className="block truncate text-xs text-slate-500">
               {tache.echeance && <span className={enRetard(tache) ? 'font-bold text-red-600' : ''}>📅 {dateCourte(tache.echeance)}</span>}
@@ -216,6 +235,7 @@ function TacheRow({ info, onOpen, onRetirer, onSupprimer, dense }) {
             {statut === 'en_cours' && <span className="text-xs font-semibold text-violet-600">{STATUTS_TACHE.en_cours}</span>}
             {pastilles}
             {!fait && prete && <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400">✓ Prête</span>}
+            {temps}
           </span>
         </button>
         {!fait && ctxChrono && <BoutonTacheChrono tache={tache} ctx={ctxChrono} />}

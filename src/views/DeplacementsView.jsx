@@ -13,6 +13,9 @@ import { Button, Empty, Icon, Sheet, TextField } from '../components/ui.jsx';
 import { Glissable } from '../components/Glissable.jsx';
 import { BoutonChrono, SuggestionChrono, TempsView } from '../components/Chrono.jsx';
 import { useContexteEcran } from '../chrono.js';
+import { ACTIVITES, ORDRE_ACTIVITES, duree, formatDuree } from '../../shared/temps.js';
+import { estimerDeplacement, tempsTache } from '../../shared/estimations.js';
+import { formatEstimation } from '../components/Chrono.jsx';
 import { CLASSEMENTS_INTERVENTIONS, classerInterventions } from '../../shared/classement.js';
 import { lignesDescription } from '../../shared/interventions.js';
 import { refIntervention, refTache, refVoyage } from '../../shared/references.js';
@@ -319,6 +322,7 @@ function VoyageDetail({ voyage, onBack, onOpen }) {
               </Button>
             )}
             {its.length === 0 && <Empty>Aucune intervention : ajoute des tâches, une intervention sera créée pour chaque bien.</Empty>}
+            {its.length > 0 && <EstimationDeplacement taches={tachesDuVoyage} biens={its.map((i) => i.appartement_id).filter(Boolean)} />}
             <ul className={dense ? 'space-y-1' : 'space-y-2'}>
               {its.map((i) => {
                 const ts = tachesIntervention(i.id, data);
@@ -507,6 +511,8 @@ function RecapView({ onImprimer }) {
   const { data, dep } = useData();
   const r = recap(dep.id, data);
   const [cloture, setCloture] = useState(false);
+  const [tempsAuRapport, setTempsAuRapport] = useLocalState('rapport-temps', true);
+  const reglages = useReglages();
   const ouverte = dep.statut !== 'termine';
   const lien = (t) => (data.intervention_taches || []).find((l) => l.intervention_id === dep.id && l.tache_id === t.id);
 
@@ -542,6 +548,13 @@ function RecapView({ onImprimer }) {
       </section>
 
       <div className="grid grid-cols-1 gap-2">
+        <label className="flex min-h-11 items-center gap-3 rounded-xl bg-white px-3 shadow-sm dark:bg-slate-900">
+          <input type="checkbox" className="size-6 !min-h-0" checked={tempsAuRapport} onChange={(e) => setTempsAuRapport(e.target.checked)} />
+          <span>
+            Afficher les temps dans le rapport
+            {reglages.tauxHoraire > 0 && <span className="block text-xs text-slate-500">et le coût ({reglages.tauxHoraire} €/h)</span>}
+          </span>
+        </label>
         <Button icon="print" onClick={onImprimer}>
           Rapport d'intervention (PDF / imprimer)
         </Button>
@@ -618,6 +631,15 @@ function Cloture({ onClose }) {
 function RapportImprimable() {
   const { data, dep, voyage } = useData();
   const r = recap(dep.id, data);
+  const [tempsAuRapport] = useLocalState('rapport-temps', true);
+  const { tauxHoraire } = useReglages();
+  // Temps : sur place (tâches de cette intervention) ; trajet et préparation du déplacement à part (non divisés).
+  const tTache = (t) => tempsTache(t.id, data, dep.id);
+  const surPlace = r.parTache.reduce((s, { tache }) => s + tTache(tache), 0);
+  const communs = {};
+  for (const p of (data.temps || []).filter((x) => !x.deleted && x.fin != null && x.activite !== 'tache' && x.activite !== 'planification' && (x.intervention_id === dep.id || (!x.intervention_id && x.voyage_id === voyage.id)))) communs[p.activite] = (communs[p.activite] || 0) + duree(p);
+  const nbBiens = interventionsDuVoyage(voyage.id, data).length;
+  const cout = (ms) => (tauxHoraire > 0 ? ` · ${Math.round((ms / 3_600_000) * tauxHoraire)} €` : '');
   const resultat = (t) => (data.intervention_taches || []).find((l) => l.intervention_id === dep.id && l.tache_id === t.id)?.resultat || statutTache(t);
   const garder = (liste) => liste.filter(dansRapport).map((c) => ({ ...c, photos: c.photos.filter(dansRapport) })).filter((c) => c.texte || c.photos.length);
   const compteRendu = garder(r.compteRendu);
@@ -652,6 +674,7 @@ function RapportImprimable() {
               <p>
                 {resultat(tache) === 'terminee' ? '☑' : '☐'} <b>{tache.titre}</b>
                 {tache.ref ? <span className="text-xs text-gray-600"> {refTache(tache)}</span> : null} – {STATUTS_TACHE[resultat(tache)]}
+                {tempsAuRapport && tTache(tache) > 0 && <span className="text-sm"> · ⏱ {formatDuree(tTache(tache))}</span>}
               </p>
               {lignes.length > 0 && (
                 <div className="ml-6 text-sm">
@@ -666,6 +689,21 @@ function RapportImprimable() {
           );
         })}
       </ul>
+      {tempsAuRapport && (surPlace > 0 || Object.keys(communs).length > 0) && (
+        <div className="mb-4 break-inside-avoid">
+          <h2 className="mb-1 border-b border-black text-lg font-bold">Temps passé</h2>
+          <p>
+            Sur place (tâches) : <b>{formatDuree(surPlace)}</b>
+            {cout(surPlace)}
+          </p>
+          {ORDRE_ACTIVITES.filter((a) => communs[a]).map((a) => (
+            <p key={a} className="text-sm">
+              {ACTIVITES[a].nom} : {formatDuree(communs[a])}
+              {nbBiens > 1 && a !== 'achats' ? ` (déplacement commun à ${nbBiens} biens)` : ''}
+            </p>
+          ))}
+        </div>
+      )}
       {compteRendu.length > 0 && (
         <>
           <h2 className="mb-1 border-b border-black text-lg font-bold">Compte rendu</h2>
@@ -686,5 +724,29 @@ function RapportImprimable() {
         </>
       )}
     </div>
+  );
+}
+
+/** Estimation d'un déplacement d'après les fois précédentes : sur place (tâches) + trajet (non divisé). */
+function EstimationDeplacement({ taches, biens }) {
+  const { data } = useData();
+  const e = estimerDeplacement(taches, biens, data);
+  const aFaire = taches.filter((t) => t.statut !== 'terminee').length;
+  if (!e.surPlace && !e.trajet) return null;
+  return (
+    <p className="rounded-xl bg-white px-3 py-2 text-sm shadow-sm dark:bg-slate-900">
+      ⏱ Estimation : sur place <b>≈ {formatDuree(e.surPlace)}</b>
+      {e.trajet ? (
+        <>
+          {' '}
+          · trajet <b>≈ {formatDuree(e.trajet)}</b> · total <b>≈ {formatDuree(e.total)}</b>
+        </>
+      ) : null}
+      {e.sansEstimation.length > 0 && (
+        <span className="block text-xs text-slate-500">
+          {e.sansEstimation.length} tâche{e.sansEstimation.length > 1 ? 's' : ''} sur {aFaire} sans historique (pas comptée{e.sansEstimation.length > 1 ? 's' : ''})
+        </span>
+      )}
+    </p>
   );
 }

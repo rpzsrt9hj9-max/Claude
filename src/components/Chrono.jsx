@@ -13,6 +13,10 @@ import { avecAnnulation } from '../annulation.js';
 
 const TROIS_HEURES = 3 * 3_600_000;
 
+/** « ≈ 1 h 10 (méd.) · 1 h 25 moy. · 6× » */
+export const formatEstimation = (e, court = false) =>
+  e ? (court ? `≈ ${formatDuree(e.mediane)}` : `≈ ${formatDuree(e.mediane)} (médiane) · ${formatDuree(e.moyenne)} en moyenne · ${e.n} fois`) : '';
+
 /**
  * Bandeau du chrono, au-dessus de la barre du bas, et « moteur » : suit l'écran (planification, mode automatique),
  * s'arrête quand l'appli est cachée, propose de reprendre, gère les boutons de la notification Android.
@@ -185,18 +189,18 @@ export function BoutonChrono({ ctx, taches = [] }) {
 }
 
 /** Boutons d'activités (Trajet, Préparation…), et les tâches si on est dans une intervention. */
-export function BoutonsActivites({ ctx, taches = [], onLance }) {
+export function BoutonsActivites({ ctx, taches = [], onLance, activites = ORDRE_ACTIVITES.filter((a) => a !== 'tache' && a !== 'etude') }) {
   const { data } = useData();
   const actif = enCours(data.temps);
   const go = async (activite, c = ctx) => {
     await lancer(activite, c, data);
     onLance?.();
   };
-  const estActif = (act, tacheId = null) => actif && actif.activite === act && (actif.tache_id ?? null) === tacheId && (actif.voyage_id ?? null) === (ctx.voyage_id ?? null);
+  const estActif = (act, tacheId = null) => !!actif && actif.activite === act && (actif.tache_id ?? null) === tacheId && (actif.voyage_id ?? null) === (ctx.voyage_id ?? null);
   return (
     <div className="space-y-2">
       <div className="grid grid-cols-2 gap-2">
-        {ORDRE_ACTIVITES.filter((a) => a !== 'tache').map((a) => (
+        {activites.map((a) => (
           <button
             key={a}
             type="button"

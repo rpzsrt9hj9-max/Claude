@@ -42,7 +42,7 @@ export const TABLES = {
   // L'écran ne gère pour l'instant qu'une quantité, au lieu principal de l'article.
   stocks: ['article_id', 'lieu_id', 'quantite'],
   // Suivi du temps : une période (debut, fin en ms ; fin vide = chrono en cours).
-  // activite : trajet | preparation | achats | rangement | tache | planification.
+  // activite : trajet | preparation | achats | rangement | tache | etude (plans, devis) | planification.
   // Contexte connu au moment du chrono (pour la répartition à l'affichage) ; contexte = écran (« catalogue »…).
   temps: ['activite', 'debut', 'fin', 'voyage_id', 'intervention_id', 'tache_id', 'appartement_id', 'contexte', 'note'],
 };

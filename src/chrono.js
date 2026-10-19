@@ -97,7 +97,7 @@ export function libelleContexte(t, data) {
   if (inter) return nomIntervention(inter, data);
   const voyage = t.voyage_id && ((data.voyages || []).find((x) => x.id === t.voyage_id) ?? data.deplacements.find((x) => x.id === t.voyage_id));
   if (voyage) return voyage.nom;
-  return { catalogue: 'Catalogue', taches: 'Liste des tâches', plus: 'Réglages', deplacements: 'Déplacements', interventions: 'Interventions' }[t.contexte] ?? '';
+  return { catalogue: 'Catalogue', taches: 'Liste des tâches', plus: 'Réglages', deplacements: 'Déplacements', interventions: 'Interventions', general: 'Hors déplacement' }[t.contexte] ?? '';
 }
 
 // ---------- Planification et mode automatique : suivre l'écran affiché, s'arrêter quand l'appli est cachée ----------

@@ -1,4 +1,7 @@
 import { useMemo, useState } from 'react';
+import { estimerTache, tempsTache } from '../../shared/estimations.js';
+import { formatDuree } from '../../shared/temps.js';
+import { formatEstimation } from '../components/Chrono.jsx';
 import { useContexteEcran } from '../chrono.js';
 import { useData } from '../data.js';
 import { matchesSearch, findSameName, findSimilar, nameKey } from '../../shared/match.js';
@@ -177,6 +180,16 @@ export function TacheEditor({ tache, modele = !!tache?.modele, defaultAppartemen
             {tache.ref ? <b className="font-semibold text-slate-600 dark:text-slate-300">{refTache(tache)} · </b> : null}
             Créée le {new Date(tache.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
             {statut !== 'terminee' && ` · ouverte depuis ${ouverteDepuis(tache.created_at)}`}
+          </p>
+        )}
+        {tache && (tempsTache(tache.id, data) > 0 || estimerTache(tache, data)) && (
+          <p className="rounded-xl bg-slate-100 px-3 py-2 text-sm dark:bg-slate-800">
+            {!modele && tempsTache(tache.id, data) > 0 && (
+              <span className="block">
+                ⏱ Temps passé : <b>{formatDuree(tempsTache(tache.id, data))}</b>
+              </span>
+            )}
+            {estimerTache(tache, data) && <span className="block text-slate-600 dark:text-slate-300">Estimation {formatEstimation(estimerTache(tache, data))}</span>}
           </p>
         )}
         {!modele && (

@@ -145,3 +145,47 @@ describe('v5 : suivi du temps', () => {
     expect(b.parTache).toEqual([{ tache: d.taches[0], ms: 2 * h }]);
   });
 });
+
+import { estimerDeplacement, estimerTache, mediane, tempsTache } from '../shared/estimations.js';
+
+describe('v5.1 : estimations', () => {
+  const h = 3_600_000;
+  function histo() {
+    const d = data();
+    d.taches.push(
+      r({ id: 'old1', titre: 'Changer ampoules', appartement_id: 'P', modele_id: 'mod', statut: 'terminee' }),
+      r({ id: 'old2', titre: 'Changer ampoules', appartement_id: 'G', modele_id: 'mod', statut: 'terminee' }),
+      r({ id: 'old3', titre: 'changer ampoules', appartement_id: 'M', statut: 'terminee' }),
+    );
+    d.deplacements = [r({ id: 'I1', voyage_id: 'V1', appartement_id: 'P' }), r({ id: 'I2', voyage_id: 'V2', appartement_id: 'P' }), r({ id: 'I3', voyage_id: 'V2', appartement_id: 'G' })];
+    d.temps = [
+      r({ id: 'a', activite: 'tache', tache_id: 'old1', debut: 0, fin: 1 * h }),
+      r({ id: 'b', activite: 'tache', tache_id: 'old2', debut: 0, fin: 2 * h }),
+      r({ id: 'c', activite: 'tache', tache_id: 'old3', debut: 0, fin: 6 * h }),
+      r({ id: 'd', activite: 'trajet', voyage_id: 'V1', debut: 0, fin: 4 * h }),
+      r({ id: 'e', activite: 'trajet', voyage_id: 'V2', debut: 0, fin: 2 * h }),
+      r({ id: 'f', activite: 'trajet', voyage_id: 'V2', debut: 3 * h, fin: 5 * h }),
+    ];
+    return d;
+  }
+  it('médiane', () => {
+    expect(mediane([3, 1, 2])).toBe(2);
+    expect(mediane([1, 2, 3, 10])).toBe(2.5);
+    expect(mediane([])).toBeNull();
+  });
+  it('une tâche s’estime d’après sa tâche type, sinon d’après son nom', () => {
+    const d = histo();
+    expect(estimerTache(d.taches.find((t) => t.id === 'tp'), d)).toEqual({ mediane: 1.5 * h, moyenne: 1.5 * h, n: 2 });
+    expect(estimerTache(d.taches.find((t) => t.id === 'mod'), d)).toEqual({ mediane: 1.5 * h, moyenne: 1.5 * h, n: 2 });
+    expect(estimerTache({ id: 'x', titre: 'Changer AMPOULES' }, d)).toEqual({ mediane: 2 * h, moyenne: 3 * h, n: 3 });
+    expect(estimerTache({ id: 'y', titre: 'Inconnue' }, d)).toBeNull();
+    expect(tempsTache('old2', d)).toBe(2 * h);
+  });
+  it('déplacement : tâches + trajet non divisé (le plus long des biens)', () => {
+    const d = histo();
+    const e = estimerDeplacement([d.taches.find((t) => t.id === 'tp'), d.taches.find((t) => t.id === 'tg')], ['P', 'G'], d);
+    expect(e.surPlace).toBe(1.5 * h);
+    expect(e.sansEstimation.map((t) => t.titre)).toEqual(['Fixer étagère']);
+    expect(e.trajet).toBe(4 * h); // Pasteur : médiane(4 h, 4 h) ; De Gaulle : 4 h
+  });
+});

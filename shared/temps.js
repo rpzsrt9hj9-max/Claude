@@ -10,9 +10,10 @@ export const ACTIVITES = {
   achats: { nom: 'Achats', icone: '🛒' },
   rangement: { nom: 'Rangement', icone: '🧹' },
   tache: { nom: 'Tâche', icone: '🔨' },
+  etude: { nom: 'Plans, devis', icone: '📐' }, // préparation générale hors déplacement (plans, devis, commandes)
   planification: { nom: 'Planification', icone: '🗓️' },
 };
-export const ORDRE_ACTIVITES = ['trajet', 'preparation', 'achats', 'tache', 'rangement', 'planification'];
+export const ORDRE_ACTIVITES = ['trajet', 'preparation', 'achats', 'tache', 'rangement', 'etude', 'planification'];
 export const CONTEXTES = { catalogue: 'Amélioration / catalogue', taches: 'Liste des tâches', plus: 'Réglages' };
 
 export const enCours = (temps) => (temps || []).find((t) => !t.deleted && t.fin == null) ?? null;

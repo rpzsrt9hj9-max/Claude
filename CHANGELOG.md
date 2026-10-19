@@ -2,6 +2,13 @@
 
 Même contenu que la page « Nouveautés » de l'appli (Plus → Nouveautés). Les versions précédentes restent en ligne : /Claude/deplacements/vN/.
 
+## v5.1 — Temps au rapport et estimations (19/10/2026)
+
+- Rapport d’intervention : temps passé sur chaque tâche, total sur place et, à part, trajet / préparation / achats / rangement du déplacement (non divisés). Coût si un taux horaire est réglé (Plus → Suivi du temps). Case « Afficher les temps dans le rapport » dans le Récap.
+- Estimations d’après les fois précédentes (tâches terminées de la même tâche type, sinon du même nom) : médiane et moyenne. Affichées sur chaque tâche (« ⏱ 1 h 00 / ≈ 1 h 30 »), dans la fiche tâche, et en choisissant une tâche type.
+- Estimation d’un déplacement : sur place (somme des tâches à faire) + trajet estimé par bien (médiane des trajets passés, non divisé ; le plus long des biens).
+- Nouvelle activité « 📐 Plans, devis » pour la préparation hors déplacement : Plus → Suivi du temps (avec Planification, Achats, Rangement).
+
 ## v5 — Suivi du temps, caisses, basiques (19/10/2026)
 
 - Suivi du temps : ⏱ dans un déplacement ou une intervention (Trajet, Préparation, Achats, Rangement, Planification), ▶ sur chaque tâche. Un seul chrono : en lancer un arrête le précédent. Bandeau au-dessus de la barre du bas avec ⏸ ⏹.

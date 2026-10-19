@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react';
+import { estimerTache } from '../../shared/estimations.js';
+import { formatEstimation } from '../components/Chrono.jsx';
 import { useData, useLocalState } from '../data.js';
 import { BigCheck, Button, Empty, Icon, MicButton, Sheet } from '../components/ui.jsx';
 import { TacheEditor } from './TacheEditor.jsx';
@@ -279,7 +281,10 @@ export function ChoixModele({ onClose, onVide, onModeles }) {
               </span>
               <span className="flex-1">
                 <span className="block font-semibold">📋 {m.titre}</span>
-                <span className="text-sm text-slate-500">{n} article(s)</span>
+                <span className="text-sm text-slate-500">
+                  {n} article(s)
+                  {estimerTache(m, data) && ` · ${formatEstimation(estimerTache(m, data), true)} (${estimerTache(m, data).n} fois)`}
+                </span>
               </span>
             </button>
           );

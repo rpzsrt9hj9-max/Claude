@@ -110,7 +110,8 @@ L'utilisateur demande de **garder la version précédente à chaque mise à jour
 | v4 (famille, achats, accessoires, dense) | `2265777` | /Claude/deplacements/v4/ |
 | v4.1 (glisser / croix pour supprimer, annuler, statut simplifié) | `f066d01` | /Claude/deplacements/v4.1/ |
 | v4.2 (Google Sheet du catalogue) | `87bda14` | /Claude/deplacements/v4.2/ |
-| v5 (suivi du temps, caisses, basiques…) | dernier commit de `claude/deplacements-app` | /Claude/deplacements/ |
+| v5 (suivi du temps, caisses, basiques…) | `63d6103` | /Claude/deplacements/v5/ |
+| v5.1 (temps au rapport, estimations) | dernier commit de `claude/deplacements-app` | /Claude/deplacements/ |
 
 Pour publier une ancienne version : `git worktree add ../vN <commit>`, y remplacer le nom de la base Dexie `'deplacements'` par `'deplacements-vN'` (src/db.js), puis `BASE=/Claude/deplacements/vN/ npx vite build` et copier `dist/` dans `site/deplacements/vN/`. La version actuelle a `navigateFallbackDenylist: [/\/v\d+\//]` pour que son service worker ne capture pas les anciennes versions.
 
@@ -208,6 +209,11 @@ Une seule version v4 regroupe tout ce qui suit (choix de l'utilisateur). La v3 r
 - Logique : `shared/caisses.js`, `shared/retrait.js`, `shared/temps.js`, `computeTrip` (4ᵉ argument : affaires du déplacement ; basiques) ; tests `tests/v5.test.js`.
 - Appli : `src/chrono.js` (contexte d'écran par niveaux, planification, mode auto, notification), `src/components/Chrono.jsx` (bandeau, ⏱, ▶, onglet Temps, périodes), `src/views/SuiviTemps.jsx`, `public/chrono-sw.js` (boutons de la notification, importé par le service worker). Variable CSS `--bas` = hauteur occupée en bas (barre + bandeau).
 - Limite connue : sur iPhone, pas de chrono sur l'écran verrouillé pour une appli web (le temps reste juste : horodatage).
+
+### v5.1 (19/10/2026) : temps au rapport et estimations
+- Décisions : rapport = temps par tâche + total sur place, trajet/préparation à part, coût si taux horaire (réglage `tauxHoraire`, par appareil), case « Afficher les temps » (localStorage `rapport-temps`) ; préparation hors déplacement = activité générale `etude` (« Plans, devis ») ; estimation = médiane ET moyenne ; trajet estimé **par bien**, automatique, **non divisé** (le plus long des biens du déplacement).
+- `shared/estimations.js` (tests dans `tests/v5.test.js`) : `tempsTache`, `indexTaches` (tâches terminées, > 1 min, famille = tâche type sinon nom), `estimerTache`, `indexTrajets`, `estimerDeplacement`.
+- Idées pour la suite (exprimées par l'utilisateur) : exploiter davantage les données (temps par type de tâche et par bien, « matrice »), planifier une journée d'après les estimations.
 
 ## 7. Commandes
 
