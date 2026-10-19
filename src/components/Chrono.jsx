@@ -102,10 +102,10 @@ export function BandeauChrono({ data, onHauteur }) {
               Corriger ?
             </button>
           )}
-          <button type="button" aria-label="Pause" className="flex size-9 shrink-0 items-center justify-center rounded-lg active:bg-white/10" onClick={() => pause(data)}>
+          <button type="button" aria-label="Pause" className="flex size-10 shrink-0 items-center justify-center rounded-lg text-xl active:bg-white/10" onClick={() => pause(data)}>
             ⏸
           </button>
-          <button type="button" aria-label="Arrêter" className="flex size-9 shrink-0 items-center justify-center rounded-lg active:bg-white/10" onClick={() => stop(data)}>
+          <button type="button" aria-label="Arrêter" className="flex size-10 shrink-0 items-center justify-center rounded-lg text-xl active:bg-white/10" onClick={() => stop(data)}>
             ⏹
           </button>
         </>

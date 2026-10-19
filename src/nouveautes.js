@@ -1,6 +1,24 @@
 // Journal des versions affiché dans l'appli (Plus → Nouveautés) ; même contenu que CHANGELOG.md.
 export const NOUVEAUTES = [
   {
+    version: 'v5',
+    date: '2026-10-19',
+    titre: 'Suivi du temps, caisses, basiques',
+    points: [
+      'Suivi du temps : ⏱ dans un déplacement ou une intervention (Trajet, Préparation, Achats, Rangement, Planification), ▶ sur chaque tâche. Un seul chrono : en lancer un arrête le précédent. Bandeau au-dessus de la barre du bas avec ⏸ ⏹.',
+      'Planification : suit l’écran affiché (catalogue, déplacement, intervention, tâche) et s’arrête quand l’appli est cachée ; au retour, « Reprendre ? ». Chrono qui tourne depuis plus de 3 h : proposition de corriger l’heure de fin.',
+      'Onglet « Temps » du déplacement : bilan par activité, par bien (temps commun réparti à parts égales) et par tâche ; périodes modifiables, supprimables par glissement, ajout d’une période oubliée. Plus → Suivi du temps : tout l’historique. Android : notification avec Pause / Stop.',
+      'Caisses (À prendre → 📦 Caisses) : une caisse par combinaison de biens (« Pasteur », « De Gaulle + Pasteur »…), outils et consommables en commun, matériel réparti ; réglage par article ; fusionner / séparer des caisses.',
+      'Basiques (« Basique outillage »…) : une caisse à vérifier, son contenu se coche au chargement ; contenu modifiable dans la fiche de l’article.',
+      'À prendre : ajout d’affaires sans tâche (lunettes de soleil…), avec « → lier à une tâche » ; glisser = « ne pas prendre » (tâches concernées par bien, puis question pour chaque tâche type) ; bouton 🛒 sur chaque ligne et « 🛒 À acheter » dans la liste des lieux.',
+      'À sortir : seulement ce qui est dans la voiture (bleu) ; ce qui n’a pas été chargé est grisé.',
+      'Glisser pour supprimer aussi les déplacements et les interventions (avec « Annuler »).',
+      'Tâches : 4 statuts (À traiter, En cours, Reportée, Terminée) ; un article ajouté à une tâche en cours est noté « Manquait » dans le compte rendu. Fiche tâche plus dense.',
+      'Enregistrer comme tâche type : si elle existe déjà, choisir « Remplacer » ou « Nouvelle version ».',
+      'Options développeur : démarrage du chrono (un toucher + suggestions / automatique selon l’écran / manuel), commandes du chrono, bouton 🛒, option « À acheter » des lieux.',
+    ],
+  },
+  {
     version: 'v4.2',
     date: '2026-10-17',
     titre: 'Google Sheet du catalogue',

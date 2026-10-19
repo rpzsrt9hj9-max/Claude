@@ -109,7 +109,8 @@ L'utilisateur demande de **garder la version précédente à chaque mise à jour
 | v3 (onglet Interventions) | `bd21a5c` | /Claude/deplacements/v3/ |
 | v4 (famille, achats, accessoires, dense) | `2265777` | /Claude/deplacements/v4/ |
 | v4.1 (glisser / croix pour supprimer, annuler, statut simplifié) | `f066d01` | /Claude/deplacements/v4.1/ |
-| v4.2 (Google Sheet du catalogue) | dernier commit de `claude/deplacements-app` | /Claude/deplacements/ |
+| v4.2 (Google Sheet du catalogue) | `87bda14` | /Claude/deplacements/v4.2/ |
+| v5 (suivi du temps, caisses, basiques…) | dernier commit de `claude/deplacements-app` | /Claude/deplacements/ |
 
 Pour publier une ancienne version : `git worktree add ../vN <commit>`, y remplacer le nom de la base Dexie `'deplacements'` par `'deplacements-vN'` (src/db.js), puis `BASE=/Claude/deplacements/vN/ npx vite build` et copier `dist/` dans `site/deplacements/vN/`. La version actuelle a `navigateFallbackDenylist: [/\/v\d+\//]` pour que son service worker ne capture pas les anciennes versions.
 
@@ -201,6 +202,12 @@ Une seule version v4 regroupe tout ce qui suit (choix de l'utilisateur). La v3 r
 - Enregistrer le détail (début, fin, activité, déplacement, intervention/bien, tâche, lieu si connus) ; **répartition à l'affichage** (parts égales entre biens au départ, règle modifiable plus tard).
 - Corrections : liste des périodes modifiable, suppression par glissement, « + Ajouter une période ».
 - Bilan : temps total, par activité, par bien, par tâche (matrice).
+
+### État de la v5 : faite et testée (19/10/2026)
+- Tables : `kit_contenus`, `voyage_articles`, `temps` ; colonnes `articles.kit`, `articles.caisse_mode`, `voyages.caisses` ; Dexie version 6.
+- Logique : `shared/caisses.js`, `shared/retrait.js`, `shared/temps.js`, `computeTrip` (4ᵉ argument : affaires du déplacement ; basiques) ; tests `tests/v5.test.js`.
+- Appli : `src/chrono.js` (contexte d'écran par niveaux, planification, mode auto, notification), `src/components/Chrono.jsx` (bandeau, ⏱, ▶, onglet Temps, périodes), `src/views/SuiviTemps.jsx`, `public/chrono-sw.js` (boutons de la notification, importé par le service worker). Variable CSS `--bas` = hauteur occupée en bas (barre + bandeau).
+- Limite connue : sur iPhone, pas de chrono sur l'écran verrouillé pour une appli web (le temps reste juste : horodatage).
 
 ## 7. Commandes
 
