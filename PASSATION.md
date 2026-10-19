@@ -169,6 +169,39 @@ Une seule version v4 regroupe tout ce qui suit (choix de l'utilisateur). La v3 r
 - Testé dans le navigateur (390 px, standard et dense, scénarios démo + comptes famille sur faux Supabase) : aucune erreur.
 - À noter : lors de la session précédente, j'avais dit à tort que deux petits correctifs (bannière « Voir comme », écran de bienvenue) n'avaient pas été appliqués ; ils l'étaient bien (vérifié).
 
+## 6 quater. Version v5 : décisions validées par l'utilisateur (19/10/2026) — UNE SEULE VERSION
+
+**Glisser partout** (sauf exceptions évidentes) : déplacements et interventions (supprimer, les tâches restent), lignes d'« À prendre » (retirer), lignes d'« À acheter », etc. Même composant `Glissable` (réglage croix / glisser).
+
+**À sortir** : on ne peut sortir que ce qui a été chargé (pris) dans la voiture. Fond **bleu** = dans la voiture, **gris** = pas chargé (case désactivée).
+
+**À acheter depuis n'importe quel article** : les DEUX — option « 🛒 À acheter » en tête de la liste déroulante des lieux (partout) ET bouton 🛒 sur chaque ligne. Options développeur pour masquer l'un ou l'autre.
+
+**Retirer depuis « À prendre »** (glissement) : fenêtre « Attention, cet élément est utilisé pour : » + tâches regroupées par lieu/bien (en-tête = bien, puis la liste des tâches) → « Êtes-vous sûr de vouloir l'enlever ? » Oui/Non. Puis, pour CHAQUE tâche type concernée (tâche créée depuis un modèle qui contient l'article), une fenêtre « Modifier aussi la tâche type X ? ».
+
+**Ajout direct dans « À prendre »** : champ « + Ajouter » ; par défaut l'article est lié **au déplacement** (à aucune tâche, ex. lunettes de soleil) ; lien secondaire « → lier à une tâche » (et si la tâche vient d'une tâche type : « aussi la tâche type ? »).
+
+**Fiche tâche condensée** (outillage, matériel… plus dense).
+
+**Basiques (kits)** : un article « 📦 Basique outillage » = une **caisse à vérifier**. Une ligne dans la tâche et dans À prendre ; en la dépliant on coche son contenu (visseuse Bosch 12 V, embouts, set d'embouts, cutter, crayon, mètre, pince multifonction…) ; « pris » quand tout est vérifié. Contenu modifiable dans le temps (comme les items à proposer).
+
+**Caisses par combinaison de biens** : une caisse par combinaison (« Pasteur », « De Gaulle », « Pasteur + Mulot »…), fusion / séparation possibles. Règle : outillage, accessoires, consommables → caisse commune de la combinaison de biens qui les utilisent ; matériel → réparti par bien. Réglage par article « Caisse : automatique / toujours en commun / toujours réparti » (peinture retouche, ampoules). Affichage dans À prendre : **Lieu › puis caisse** (étiquette « → 📦 Pasteur » sur chaque article, « N caisses à prévoir » en haut) — nouveau mode « Caisses ».
+
+**Statuts de tâche** : À traiter · **En cours** · Reportée · Terminée. Un article ajouté à une tâche « en cours » est noté « Manquait : X » dans le compte rendu et le rapport.
+
+**Tâche type** : enregistrer comme tâche type copie tout sauf les commentaires ; si une tâche type du même nom existe : « Remplacer l'existante » ou « Créer une nouvelle version (autre nom) ».
+
+**Suivi du temps** :
+- Téléphones : iPhone ET Android (famille). Android : notification avec Pause/Stop si possible ; iPhone : bandeau dans l'appli seulement. Temps toujours juste même appli fermée (horodatage).
+- Mode de démarrage : **3 options dans Options développeur** : « un toucher + suggestions » (défaut, un seul chrono, en lancer un arrête le précédent, bandeau proposant ▶ Préparation en ouvrant À prendre), « automatique selon l'écran », « manuel uniquement ».
+- Catégories : 🚗 Trajet, 📦 Préparation/chargement, 🛒 Achats, 🧹 Rangement, 🔨 Tâche (travail sur la tâche), 🗓️ **Planification**.
+- **Planification** : compte tant que l'appli est affichée, selon l'écran ouvert : catalogue → « amélioration / catalogue » ; tâche → tâche + intervention + déplacement ; intervention → intervention + déplacement ; déplacement → déplacement. S'arrête dès que l'appli est cachée ; à la réouverture : « Reprendre la planification ? ».
+- Arrêt auto quand l'appli est cachée : **seulement Planification**. Les autres continuent ; si un chrono tourne depuis > 3 h, demander à la réouverture s'il faut corriger la fin.
+- Interface : défaut = bandeau fin au-dessus de la barre du bas quand ça tourne (activité · contexte · durée · ⏸ ⏹) + bouton ⏱ dans l'en-tête déplacement/intervention + ▶ sur chaque tâche d'intervention + onglet « Temps » du déplacement (bilan). Option développeur pour l'autre disposition (tout dans l'onglet Temps).
+- Enregistrer le détail (début, fin, activité, déplacement, intervention/bien, tâche, lieu si connus) ; **répartition à l'affichage** (parts égales entre biens au départ, règle modifiable plus tard).
+- Corrections : liste des périodes modifiable, suppression par glissement, « + Ajouter une période ».
+- Bilan : temps total, par activité, par bien, par tâche (matrice).
+
 ## 7. Commandes
 
 ```bash
