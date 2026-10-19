@@ -10,10 +10,11 @@
     <link rel="apple-touch-icon" href="apple-touch-icon.png" />
     <title>Déplacements</title>
     <script>
-      try { if ((localStorage.getItem('theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')) === 'dark') document.documentElement.classList.add('dark'); } catch {}
+      try { document.documentElement.dataset.palette = JSON.parse(localStorage.getItem('reglages-appareil') || '{}').palette || 'classique'; } catch {}
+      try { if (((localStorage.getItem('theme') || '').replace(/"/g, '') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')) === 'dark') document.documentElement.classList.add('dark'); } catch {}
     </script>
-    <script type="module" crossorigin src="/Claude/deplacements/assets/index-Dil5eeS4.js"></script>
-    <link rel="stylesheet" crossorigin href="/Claude/deplacements/assets/index-DPQAkSQt.css">
+    <script type="module" crossorigin src="/Claude/deplacements/assets/index-DlsaHp5M.js"></script>
+    <link rel="stylesheet" crossorigin href="/Claude/deplacements/assets/index-Dixk9xmT.css">
   <link rel="manifest" href="/Claude/deplacements/manifest.webmanifest"></head>
   <body>
     <div id="root"></div>
