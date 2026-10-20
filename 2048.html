@@ -115,7 +115,7 @@ footer { color: var(--muted); font-size: 13px; }
     <p>Fusionnez les tuiles identiques pour atteindre 2048.</p>
     <button id="undo" class="ghost" title="Annuler (U, Retour arrière ou Ctrl+Z)">↶ Retour <span id="moves">0</span></button>
     <button id="restart">Nouvelle partie</button>
-    <button id="theme" class="ghost" aria-label="Changer de thème">◐</button>
+    <button id="theme" class="ghost" aria-label="Changer de thème">Thème</button>
   </div>
   <div class="board" id="board" tabindex="0" aria-label="Plateau de jeu">
     <div id="overlay" class="overlay" hidden></div>
@@ -210,8 +210,8 @@ footer { color: var(--muted); font-size: 13px; }
   function canMove() {
     for (var r = 0; r < N; r++) for (var c = 0; c < N; c++) {
       var t = grid[r][c]; if (!t) return true;
-      if (c + 1 < N && grid[r][c + 1].v === t.v) return true;
-      if (r + 1 < N && grid[r + 1][c].v === t.v) return true;
+      if (c + 1 < N && (!grid[r][c + 1] || grid[r][c + 1].v === t.v)) return true;
+      if (r + 1 < N && (!grid[r + 1][c] || grid[r + 1][c].v === t.v)) return true;
     }
     return false;
   }
