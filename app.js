@@ -89,6 +89,7 @@ function addStepRow(data) {
   const hours = row.querySelector(".step-hours");
   const minutes = row.querySelector(".step-minutes");
   const removeBtn = row.querySelector(".step-remove");
+  const handle = row.querySelector(".step-handle");
 
   if (data) {
     desc.value = data.desc ?? "";
@@ -100,6 +101,8 @@ function addStepRow(data) {
     el.addEventListener("input", () => handleStepInput(row));
   });
 
+  handle.addEventListener("pointerdown", (e) => startDrag(e, row, handle));
+
   removeBtn.addEventListener("click", () => {
     row.remove();
     recalculate();
@@ -108,6 +111,65 @@ function addStepRow(data) {
 
   stepsList.appendChild(row);
   return desc;
+}
+
+function ensureTrailingRow() {
+  const last = stepsList.lastElementChild;
+  if (!last || isRowFilled(last)) {
+    addStepRow();
+  }
+}
+
+function startDrag(e, row, handle) {
+  e.preventDefault();
+  handle.setPointerCapture(e.pointerId);
+  row.classList.add("dragging");
+
+  const onMove = (ev) => {
+    const y = ev.clientY;
+    const edge = 60;
+    if (y < edge) window.scrollBy(0, -12);
+    else if (y > window.innerHeight - edge) window.scrollBy(0, 12);
+
+    const siblings = Array.from(stepsList.children).filter((r) => r !== row);
+    const next = siblings.find((r) => {
+      const box = r.getBoundingClientRect();
+      return y < box.top + box.height / 2;
+    });
+    if (next) {
+      if (row.nextElementSibling !== next) stepsList.insertBefore(row, next);
+      else return;
+    } else if (stepsList.lastElementChild !== row) {
+      stepsList.appendChild(row);
+    } else {
+      return;
+    }
+    // déplacer le nœud dans le DOM libère la capture : on la reprend
+    handle.setPointerCapture(ev.pointerId);
+  };
+
+  const onEnd = () => {
+    handle.removeEventListener("pointermove", onMove);
+    handle.removeEventListener("pointerup", onEnd);
+    handle.removeEventListener("pointercancel", onEnd);
+    row.classList.remove("dragging");
+    ensureTrailingRow();
+    recalculate();
+    saveState();
+  };
+
+  handle.addEventListener("pointermove", onMove);
+  handle.addEventListener("pointerup", onEnd);
+  handle.addEventListener("pointercancel", onEnd);
+}
+
+// Garde la chronologie identique quand on change de mode : l'ordre des lignes est inversé.
+function reverseSteps() {
+  const rows = Array.from(stepsList.children);
+  const last = rows[rows.length - 1];
+  const trailing = last && !isRowFilled(last) ? rows.pop() : null;
+  rows.reverse().forEach((r) => stepsList.appendChild(r));
+  if (trailing) stepsList.appendChild(trailing);
 }
 
 function setStartMode(mode) {
@@ -159,14 +221,15 @@ function updateDelta(stepsDurationTotal, startMinutes) {
   deltaValue.classList.toggle("under", deltaMinutes < 0);
 }
 
-function setPlanMode(mode) {
+function setPlanMode(mode, reorder = false) {
+  if (reorder && mode !== planMode) reverseSteps();
   planMode = mode;
   const retro = mode === "retro";
   document.body.classList.toggle("retro", retro);
   modeForward.classList.toggle("active", !retro);
   modeRetro.classList.toggle("active", retro);
   modeHint.textContent = retro
-    ? "Part de l'heure finale et remonte le temps étape par étape"
+    ? "Commence par le dernier élément, puis remonte le temps étape par étape"
     : "Pars d'une heure de départ et calcule l'arrivée";
   resultLabel.textContent = retro ? "Commencer à" : "Heure d'arrivée";
   deltaLabel.textContent = retro ? "Marge vs maintenant" : "Écart vs guess";
@@ -194,12 +257,13 @@ function recalculateRetro() {
     end += 1440; // heure déjà passée aujourd'hui : on vise demain
   }
 
-  // On remonte depuis la fin : la dernière ligne finit à l'heure finale.
+  // La première ligne est la dernière étape : elle finit à l'heure finale,
+  // chaque ligne suivante finit là où la précédente commence.
   let cursor = end;
-  for (let i = rows.length - 1; i >= 0; i--) {
-    const duration = rowDuration(rows[i]);
-    if (duration === 0 && !rows[i].querySelector(".step-desc").value.trim()) continue;
-    const t = rows[i].querySelector(".step-time");
+  for (const row of rows) {
+    const duration = rowDuration(row);
+    if (duration === 0 && !row.querySelector(".step-desc").value.trim()) continue;
+    const t = row.querySelector(".step-time");
     t.textContent = `${formatAbsolute(cursor - duration)} → ${formatAbsolute(cursor)}`;
     t.classList.add("visible");
     cursor -= duration;
@@ -290,8 +354,8 @@ function loadState() {
   }
 }
 
-modeForward.addEventListener("click", () => setPlanMode("forward"));
-modeRetro.addEventListener("click", () => setPlanMode("retro"));
+modeForward.addEventListener("click", () => setPlanMode("forward", true));
+modeRetro.addEventListener("click", () => setPlanMode("retro", true));
 endTimeInput.addEventListener("input", () => {
   recalculate();
   saveState();
