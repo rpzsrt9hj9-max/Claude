@@ -11,7 +11,15 @@ const resultTime = document.getElementById("result-time");
 const deltaRow = document.getElementById("delta-row");
 const deltaValue = document.getElementById("delta-value");
 
+const modeForward = document.getElementById("mode-forward");
+const modeRetro = document.getElementById("mode-retro");
+const modeHint = document.getElementById("mode-hint");
+const endTimeInput = document.getElementById("end-time-input");
+const resultLabel = document.getElementById("result-label");
+const deltaLabel = document.getElementById("delta-label");
+
 let startMode = "now";
+let planMode = "forward";
 
 function nowHHMM() {
   const d = new Date();
@@ -38,6 +46,23 @@ function formatDurationDelta(deltaMinutes) {
   const h = Math.floor(abs / 60);
   const m = abs % 60;
   return h > 0 ? `${sign}${h} h ${String(m).padStart(2, "0")}` : `${sign}${m} min`;
+}
+
+// Heure absolue (minutes depuis minuit aujourd'hui), avec repère de jour
+function formatAbsolute(totalMinutes) {
+  const day = Math.floor(totalMinutes / 1440);
+  const dayMinutes = totalMinutes - day * 1440;
+  const time = `${String(Math.floor(dayMinutes / 60)).padStart(2, "0")}:${String(dayMinutes % 60).padStart(2, "0")}`;
+  if (day === 0) return time;
+  if (day === 1) return `${time} (demain)`;
+  if (day === -1) return `${time} (hier)`;
+  return `${time} (${day > 0 ? "+" : ""}${day}j)`;
+}
+
+function rowDuration(row) {
+  const h = parseInt(row.querySelector(".step-hours").value, 10) || 0;
+  const m = parseInt(row.querySelector(".step-minutes").value, 10) || 0;
+  return h * 60 + m;
 }
 
 function isRowFilled(row) {
@@ -134,7 +159,68 @@ function updateDelta(stepsDurationTotal, startMinutes) {
   deltaValue.classList.toggle("under", deltaMinutes < 0);
 }
 
+function setPlanMode(mode) {
+  planMode = mode;
+  const retro = mode === "retro";
+  document.body.classList.toggle("retro", retro);
+  modeForward.classList.toggle("active", !retro);
+  modeRetro.classList.toggle("active", retro);
+  modeHint.textContent = retro
+    ? "Part de l'heure finale et remonte le temps étape par étape"
+    : "Pars d'une heure de départ et calcule l'arrivée";
+  resultLabel.textContent = retro ? "Commencer à" : "Heure d'arrivée";
+  deltaLabel.textContent = retro ? "Marge vs maintenant" : "Écart vs guess";
+  recalculate();
+  saveState();
+}
+
+function recalculateRetro() {
+  const rows = Array.from(stepsList.querySelectorAll(".step-row"));
+  rows.forEach((row) => {
+    const t = row.querySelector(".step-time");
+    t.textContent = "";
+    t.classList.remove("visible");
+  });
+
+  if (!endTimeInput.value) {
+    resultTime.textContent = "--:--";
+    deltaRow.classList.add("hidden");
+    return;
+  }
+
+  const now = parseHHMM(nowHHMM());
+  let end = parseHHMM(endTimeInput.value);
+  if (end < now) {
+    end += 1440; // heure déjà passée aujourd'hui : on vise demain
+  }
+
+  // On remonte depuis la fin : la dernière ligne finit à l'heure finale.
+  let cursor = end;
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const duration = rowDuration(rows[i]);
+    if (duration === 0 && !rows[i].querySelector(".step-desc").value.trim()) continue;
+    const t = rows[i].querySelector(".step-time");
+    t.textContent = `${formatAbsolute(cursor - duration)} → ${formatAbsolute(cursor)}`;
+    t.classList.add("visible");
+    cursor -= duration;
+  }
+
+  resultTime.textContent = formatAbsolute(cursor);
+
+  const margin = cursor - now;
+  deltaRow.classList.remove("hidden");
+  deltaValue.textContent = margin >= 0
+    ? formatDurationDelta(margin)
+    : `En retard de ${formatDurationDelta(-margin).slice(1)}`;
+  deltaValue.classList.toggle("over", margin < 0);
+  deltaValue.classList.toggle("under", margin > 0);
+}
+
 function recalculate() {
+  if (planMode === "retro") {
+    recalculateRetro();
+    return;
+  }
   const startMinutes = getStartMinutes();
   if (startMinutes === null) {
     resultTime.textContent = "--:--";
@@ -166,6 +252,8 @@ function saveState() {
       startMode,
       manualStartTime: startTimeInput.value,
       guessTime: guessTimeInput.value,
+      planMode,
+      endTime: endTimeInput.value,
       steps,
     })
   );
@@ -186,7 +274,11 @@ function loadState() {
     if (state.guessTime) {
       guessTimeInput.value = state.guessTime;
     }
+    if (state.endTime) {
+      endTimeInput.value = state.endTime;
+    }
     setStartMode(state.startMode === "manual" ? "manual" : "now");
+    setPlanMode(state.planMode === "retro" ? "retro" : "forward");
 
     if (Array.isArray(state.steps) && state.steps.length > 0) {
       state.steps.forEach((step) => addStepRow(step));
@@ -198,6 +290,12 @@ function loadState() {
   }
 }
 
+modeForward.addEventListener("click", () => setPlanMode("forward"));
+modeRetro.addEventListener("click", () => setPlanMode("retro"));
+endTimeInput.addEventListener("input", () => {
+  recalculate();
+  saveState();
+});
 btnNow.addEventListener("click", () => setStartMode("now"));
 btnManual.addEventListener("click", () => setStartMode("manual"));
 startTimeInput.addEventListener("input", () => {
@@ -219,7 +317,7 @@ loadState();
 recalculate();
 
 setInterval(() => {
-  if (startMode === "now") {
+  if (startMode === "now" || planMode === "retro") {
     recalculate();
   }
 }, 15000);

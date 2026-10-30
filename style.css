@@ -261,3 +261,29 @@ input[type="number"]::-webkit-inner-spin-button {
 input[type="number"] {
   -moz-appearance: textfield;
 }
+
+.mode-toggle {
+  margin-bottom: 0;
+}
+
+.mode-toggle + .card-hint {
+  margin: 10px 0 0;
+}
+
+body:not(.retro) .retro-only,
+body.retro .forward-only {
+  display: none;
+}
+
+.step-time {
+  display: none;
+  grid-column: 1 / -1;
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+body.retro .step-time.visible {
+  display: block;
+}
