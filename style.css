@@ -135,7 +135,7 @@ main {
 
 .step-row {
   display: grid;
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: auto 1fr auto auto;
   align-items: center;
   gap: 8px;
   padding: 10px;
@@ -260,4 +260,49 @@ input[type="number"]::-webkit-inner-spin-button {
 }
 input[type="number"] {
   -moz-appearance: textfield;
+}
+
+.mode-toggle {
+  margin-bottom: 0;
+}
+
+.mode-toggle + .card-hint {
+  margin: 10px 0 0;
+}
+
+body:not(.retro) .retro-only,
+body.retro .forward-only {
+  display: none;
+}
+
+.step-time {
+  display: none;
+  grid-column: 1 / -1;
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+body.retro .step-time.visible {
+  display: block;
+}
+
+.step-handle {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 20px;
+  line-height: 1;
+  padding: 8px 2px;
+  touch-action: none;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.step-row.dragging {
+  border-color: var(--accent);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+  opacity: 0.9;
 }

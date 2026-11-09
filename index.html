@@ -21,12 +21,26 @@
 
 <main>
   <section class="card">
+    <div class="start-toggle mode-toggle">
+      <button id="mode-forward" class="toggle-btn active" type="button">Aller</button>
+      <button id="mode-retro" class="toggle-btn" type="button">Rétro-planning</button>
+    </div>
+    <p id="mode-hint" class="card-hint">Pars d'une heure de départ et calcule l'arrivée</p>
+  </section>
+
+  <section class="card retro-only">
+    <h2>Heure finale</h2>
+    <p class="card-hint">Heure à laquelle tout doit être prêt (ex : départ du train)</p>
+    <input type="time" id="end-time-input" class="time-input">
+  </section>
+
+  <section class="card forward-only">
     <h2>Guess</h2>
     <p class="card-hint">Ton estimation de l'heure de fin</p>
     <input type="time" id="guess-time-input" class="time-input">
   </section>
 
-  <section class="card">
+  <section class="card forward-only">
     <h2>Heure de départ</h2>
     <div class="start-toggle">
       <button id="btn-now" class="toggle-btn active" type="button">Maintenant</button>
@@ -46,17 +60,18 @@
 
 <footer class="result-bar">
   <div class="result-main">
-    <div class="result-label">Heure d'arrivée</div>
+    <div id="result-label" class="result-label">Heure d'arrivée</div>
     <div id="result-time" class="result-time">--:--</div>
   </div>
   <div id="delta-row" class="delta-row hidden">
-    <span class="delta-label">Écart vs guess</span>
+    <span id="delta-label" class="delta-label">Écart vs guess</span>
     <span id="delta-value" class="delta-value">--</span>
   </div>
 </footer>
 
 <template id="step-template">
   <li class="step-row">
+    <button class="step-handle" type="button" aria-label="Déplacer la ligne">⠿</button>
     <input type="text" class="step-desc" placeholder="Description (ex : trajet vélo)">
     <div class="step-duration">
       <input type="number" class="step-hours" min="0" inputmode="numeric" placeholder="0" aria-label="Heures">
@@ -65,6 +80,7 @@
       <span class="duration-unit">min</span>
     </div>
     <button class="step-remove" type="button" aria-label="Supprimer la ligne">✕</button>
+    <div class="step-time"></div>
   </li>
 </template>
 
