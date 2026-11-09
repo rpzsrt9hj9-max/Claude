@@ -70,6 +70,7 @@ h1 { font-family: var(--font-display); font-weight: 800; font-size: 56px; line-h
 .bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .bar p { margin: 0; color: var(--muted); font-size: 14px; flex: 1 1 180px; min-width: 0; }
 button {
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent;
   font: inherit; font-weight: 700; font-size: 14px; border: 0; border-radius: 10px; padding: 10px 14px;
   background: var(--btn); color: var(--btn-fg); cursor: pointer; font-variant-numeric: tabular-nums;
 }
@@ -89,15 +90,15 @@ button:focus-visible { outline: 3px solid var(--fg); outline-offset: 2px; }
   --tl: clamp(var(--lmin), calc(var(--l0) + var(--n) * var(--ld)), var(--lmax));
   background: hsl(calc(212 - var(--n) * 21) var(--sat) var(--tl));
   color: var(--txt-hi);
-  transition: left 0.11s ease-out, top 0.11s ease-out;
+  transition: left 0.075s ease-out, top 0.075s ease-out;
   will-change: left, top;
 }
 .tile.lo { color: var(--txt-lo); }
 .tile.d4 { font-size: 7.6cqw; }
 .tile.d5 { font-size: 6cqw; }
 .tile.hot { box-shadow: 0 0 0 2px hsl(calc(212 - var(--n) * 21) 90% 70% / 0.6), 0 0 22px hsl(calc(212 - var(--n) * 21) 90% 55% / 0.55); }
-.tile.new { animation: pop 0.18s ease-out 0.1s backwards; }
-.tile.merged { animation: bump 0.18s ease-out 0.1s; }
+.tile.new { animation: pop 0.12s ease-out 0.06s backwards; }
+.tile.merged { animation: bump 0.12s ease-out 0.05s; }
 @keyframes pop { from { transform: scale(0); } to { transform: scale(1); } }
 @keyframes bump { 50% { transform: scale(1.14); } }
 .overlay {
@@ -207,7 +208,7 @@ footer { color: var(--muted); font-size: 13px; }
     history.push(before); score += gained;
     removed.forEach(function (b) {
       b.r = b.into.r; b.c = b.into.c; setPos(els[b.id], b.r, b.c);
-      var el = els[b.id]; delete els[b.id]; setTimeout(function () { el.remove(); }, 130);
+      var el = els[b.id]; delete els[b.id]; setTimeout(function () { el.remove(); }, 90);
     });
     for (var r2 = 0; r2 < N; r2++) for (var c2 = 0; c2 < N; c2++) {
       var t = grid[r2][c2]; if (t) { draw(t, t.merged ? 'merged' : ''); t.merged = false; }
@@ -267,14 +268,16 @@ footer { color: var(--muted); font-size: 13px; }
     if (k in keys) { e.preventDefault(); move(keys[k]); }
   });
 
-  var sx, sy;
+  // Le geste part dès que le doigt a parcouru 20 px, sans attendre le relâchement.
+  var sx = null, sy = null;
   boardEl.addEventListener('pointerdown', function (e) { sx = e.clientX; sy = e.clientY; });
-  boardEl.addEventListener('pointerup', function (e) {
+  boardEl.addEventListener('pointermove', function (e) {
     if (sx == null) return;
-    var dx = e.clientX - sx, dy = e.clientY - sy; sx = null;
-    if (Math.max(Math.abs(dx), Math.abs(dy)) < 24) return;
-    move(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 2 : 0) : (dy > 0 ? 3 : 1));
+    var dx = e.clientX - sx, dy = e.clientY - sy;
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < 20) return;
+    sx = null; move(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 2 : 0) : (dy > 0 ? 3 : 1));
   });
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach(function (t) { boardEl.addEventListener(t, function () { sx = null; }); });
 
   undoBtn.onclick = undo;
   document.getElementById('restart').onclick = newGame;
