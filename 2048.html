@@ -40,6 +40,7 @@
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { min-height: 100%; }
 body {
   background: var(--bg); color: var(--fg); font-family: var(--font-body);
@@ -99,9 +100,28 @@ button:focus-visible { outline: 3px solid var(--fg); outline-offset: 2px; }
 }
 .overlay h2 { font-family: var(--font-display); font-size: 40px; margin: 0; letter-spacing: -0.02em; }
 .overlay div { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+#hintBtn[aria-pressed="true"] { background: var(--btn); color: var(--btn-fg); }
+.hint-arrow { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; z-index: 4; }
+.hint-arrow > div { width: 46%; aspect-ratio: 1; transform: rotate(var(--rot, 0deg)); }
+.hint-arrow svg { width: 100%; height: 100%; display: block; animation: nudge 0.9s ease-in-out infinite; }
+.hint-arrow path { fill: var(--fg); fill-opacity: 0.6; stroke: var(--bg); stroke-width: 5; stroke-linejoin: round; paint-order: stroke; }
+@keyframes nudge { 50% { transform: translateX(7%); } }
+.hint { background: var(--panel); border-radius: 14px; padding: 14px 16px; display: grid; gap: 12px; min-width: 0; }
+.hint-head { display: flex; align-items: center; gap: 12px; }
+.hint-head small { display: block; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+.hint-head strong { font-family: var(--font-display); font-size: 22px; }
+.hint-dir { width: 44px; height: 44px; border-radius: 10px; background: var(--btn); color: var(--btn-fg); display: grid; place-items: center; font-size: 24px; font-weight: 800; flex: none; }
+.hint ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: 14px; line-height: 1.45; }
+.hint li.avoid { color: var(--muted); list-style: "✕  "; }
+.hint-moves { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.hint-moves button { padding: 8px 4px; display: grid; gap: 2px; justify-items: center; background: var(--btn-ghost); color: var(--fg); }
+.hint-moves button span { font-size: 18px; line-height: 1; }
+.hint-moves button small { font-size: 11px; font-weight: 500; color: var(--muted); }
+.hint-moves button.best { background: var(--btn); color: var(--btn-fg); }
+.hint-moves button.best small { color: var(--btn-fg); opacity: 0.8; }
 footer { color: var(--muted); font-size: 13px; }
 @media (max-width: 420px) { h1 { font-size: 44px; } .score { min-width: 74px; padding: 8px 10px; } }
-@media (prefers-reduced-motion: reduce) { .tile { transition: none; } .tile.new, .tile.merged, .gain.show { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .tile { transition: none; } .tile.new, .tile.merged, .gain.show, .hint-arrow svg { animation: none; } }
 </style>
 
 <div class="app">
@@ -117,11 +137,18 @@ footer { color: var(--muted); font-size: 13px; }
     <button id="undo" class="ghost" title="Annuler (U, Retour arrière ou Ctrl+Z)">↶ Retour <span id="moves">0</span></button>
     <button id="restart">Nouvelle partie</button>
     <button id="theme" class="ghost" aria-pressed="false">Mode nuit</button>
+    <button id="hintBtn" class="ghost" aria-pressed="false" title="Afficher le meilleur coup (H)">Indice</button>
   </div>
   <div class="board" id="board" tabindex="0" aria-label="Plateau de jeu">
+    <div class="hint-arrow" id="hintArrow" hidden><div><svg viewBox="0 0 100 100" aria-hidden="true"><path d="M12 39 H55 V20 L88 50 L55 80 V61 H12 Z"/></svg></div></div>
     <div id="overlay" class="overlay" hidden></div>
   </div>
-  <footer>Flèches, WASD ou glissement du doigt. <b>U</b>, Retour arrière ou Ctrl+Z pour revenir en arrière, sans limite.</footer>
+  <section class="hint" id="hintPanel" hidden aria-live="polite">
+    <div class="hint-head"><span class="hint-dir" id="hintDir">→</span><div><small>Coup conseillé</small><strong id="hintTitle">Droite</strong></div></div>
+    <ul id="hintWhy"></ul>
+    <div class="hint-moves" id="hintMoves"></div>
+  </section>
+  <footer>Flèches, WASD ou glissement du doigt. <b>U</b>, Retour arrière ou Ctrl+Z pour revenir en arrière, sans limite. <b>H</b> affiche ou masque les indices.</footer>
 </div>
 
 <script>
@@ -242,12 +269,13 @@ footer { color: var(--muted); font-size: 13px; }
     btns.forEach(function (b, i) { var x = document.createElement('button'); x.textContent = b[0]; if (i) x.className = 'ghost'; x.onclick = b[1]; d.appendChild(x); });
     overlay.appendChild(d); overlay.hidden = false;
   }
-  function hideOverlay() { overlay.hidden = true; }
+  function hideOverlay() { overlay.hidden = true; scheduleHint(); }
 
   function update() {
     scoreEl.textContent = score;
     if (score > best) { best = score; try { localStorage.setItem('best2048', best); } catch (e) {} }
     bestEl.textContent = best; movesEl.textContent = history.length; undoBtn.disabled = !history.length;
+    scheduleHint();
   }
 
   var keys = { ArrowLeft: 0, ArrowUp: 1, ArrowRight: 2, ArrowDown: 3, a: 0, w: 1, d: 2, s: 3 };
@@ -255,6 +283,7 @@ footer { color: var(--muted); font-size: 13px; }
     var k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
     if (((e.ctrlKey || e.metaKey) && k === 'z') || k === 'u' || k === 'Backspace') { e.preventDefault(); undo(); return; }
     if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (k === 'h') { hintBtn.click(); return; }
     if (k in keys) { e.preventDefault(); move(keys[k]); }
   });
 
@@ -282,6 +311,183 @@ footer { color: var(--muted); font-size: 13px; }
   try { var th = localStorage.getItem('theme2048'); if (th) document.documentElement.setAttribute('data-theme', th); } catch (e) {}
   if (darkQuery.addEventListener) darkQuery.addEventListener('change', syncTheme);
   syncTheme();
+
+
+  // ---- Mode indice : expectimax sur le plateau (rangs log2), heuristique par ligne précalculée ----
+  var DIRS = [['←', 'Gauche'], ['↑', 'Haut'], ['→', 'Droite'], ['↓', 'Bas']], ROT = [180, -90, 0, 90];
+  var LINES = [0, 1, 2, 3].map(function (d) {
+    return [0, 1, 2, 3].map(function (i) {
+      return [0, 1, 2, 3].map(function (j) {
+        var r = d % 2 ? (d === 1 ? j : 3 - j) : i, c = d % 2 ? i : (d === 0 ? j : 3 - j);
+        return r * 4 + c;
+      });
+    });
+  });
+  var lineScore = null;
+  function buildTable() {
+    lineScore = new Float64Array(65536);
+    for (var code = 0; code < 65536; code++) {
+      var l = [code >> 12 & 15, code >> 8 & 15, code >> 4 & 15, code & 15];
+      var sum = 0, empty = 0, merges = 0, prev = 0, run = 0, monoL = 0, monoR = 0;
+      for (var i = 0; i < 4; i++) {
+        var r = l[i]; sum += Math.pow(r, 3.5);
+        if (!r) { empty++; continue; }
+        if (prev === r) run++; else if (run) { merges += 1 + run; run = 0; }
+        prev = r;
+      }
+      if (run) merges += 1 + run;
+      for (var k = 1; k < 4; k++) {
+        if (l[k - 1] > l[k]) monoL += Math.pow(l[k - 1], 4) - Math.pow(l[k], 4);
+        else monoR += Math.pow(l[k], 4) - Math.pow(l[k - 1], 4);
+      }
+      lineScore[code] = 200000 + 270 * empty + 700 * merges - 47 * Math.min(monoL, monoR) - 11 * sum;
+    }
+  }
+  function cap(r) { return r > 15 ? 15 : r; }
+  function evalBoard(b) {
+    var s = 0;
+    for (var i = 0; i < 4; i++) {
+      s += lineScore[cap(b[i * 4]) << 12 | cap(b[i * 4 + 1]) << 8 | cap(b[i * 4 + 2]) << 4 | cap(b[i * 4 + 3])];
+      s += lineScore[cap(b[i]) << 12 | cap(b[i + 4]) << 8 | cap(b[i + 8]) << 4 | cap(b[i + 12])];
+    }
+    return s;
+  }
+  function slide(b, d) {
+    var out = b.slice(), gain = 0, merges = [], moved = false;
+    LINES[d].forEach(function (idx) {
+      var v = idx.map(function (i) { return b[i]; }).filter(Boolean), res = [], k = 0;
+      while (k < v.length) {
+        if (v[k] === v[k + 1]) { res.push(v[k] + 1); gain += Math.pow(2, v[k] + 1); merges.push(v[k] + 1); k += 2; }
+        else res.push(v[k++]);
+      }
+      idx.forEach(function (i, j) { out[i] = res[j] || 0; if (out[i] !== b[i]) moved = true; });
+    });
+    return { b: out, gain: gain, merges: merges, moved: moved };
+  }
+  function bestMove(b, depth, prob) {
+    var best = 0;
+    for (var d = 0; d < 4; d++) {
+      var s = slide(b, d);
+      if (s.moved) best = Math.max(best, chance(s.b, depth - 1, prob));
+    }
+    return best;
+  }
+  function chance(b, depth, prob) {
+    if (depth <= 0 || prob < 1e-4) return evalBoard(b);
+    var free = [];
+    for (var i = 0; i < 16; i++) if (!b[i]) free.push(i);
+    if (!free.length) return evalBoard(b);
+    var total = 0, p = prob / free.length;
+    free.forEach(function (i) {
+      b[i] = 1; total += 0.9 * bestMove(b, depth, p * 0.9);
+      b[i] = 2; total += 0.1 * bestMove(b, depth, p * 0.1);
+      b[i] = 0;
+    });
+    return total / free.length;
+  }
+
+  var CORNERS = { 0: 'en haut à gauche', 3: 'en haut à droite', 12: 'en bas à gauche', 15: 'en bas à droite' };
+  function plural(n, w) { return n + ' ' + w + (n > 1 ? 's' : ''); }
+  function maxInCorner(b, maxR) { for (var c in CORNERS) if (b[c] === maxR) return +c; return -1; }
+  function orderedEdge(b, corner) {
+    var r = corner >> 2, c = corner & 3, best = null;
+    [[r === 0 ? 'rangée du haut' : 'rangée du bas', c === 0 ? 1 : -1], [c === 0 ? 'colonne de gauche' : 'colonne de droite', r === 0 ? 4 : -4]].forEach(function (e) {
+      var vals = [];
+      for (var k = 0, i = corner; k < 4 && b[i]; k++, i += e[1]) vals.push(b[i]);
+      var ok = vals.length >= 3 && vals.every(function (v, j) { return !j || v <= vals[j - 1]; });
+      if (ok && (!best || vals.length > best.vals.length)) best = { name: e[0], vals: vals };
+    });
+    return best;
+  }
+
+  function analyse() {
+    if (!lineScore) buildTable();
+    var b = [];
+    grid.forEach(function (row) { row.forEach(function (t) { b.push(t ? Math.log2(t.v) : 0); }); });
+    var free = b.filter(function (x) { return !x; }).length, depth = free > 9 ? 2 : 3;
+    var moves = [0, 1, 2, 3].map(function (d) {
+      var s = slide(b, d);
+      return { dir: d, s: s, ok: s.moved, v: s.moved ? chance(s.b.slice(), depth - 1, 1) : -Infinity };
+    });
+    var valid = moves.filter(function (m) { return m.ok; });
+    if (!valid.length) return null;
+    valid.sort(function (x, y) { return y.v - x.v; });
+    var best = valid[0], worst = valid[valid.length - 1], spread = best.v - worst.v;
+    moves.forEach(function (m) {
+      if (!m.ok) m.verdict = 'Impossible';
+      else if (m === best) m.verdict = 'Meilleur';
+      else m.verdict = (best.v - m.v) <= Math.max(400, spread * 0.3) ? 'Correct' : 'À éviter';
+    });
+
+    var why = [], avoid = [], maxR = Math.max.apply(null, b), maxV = Math.pow(2, maxR);
+    var cornerNow = maxInCorner(b, maxR), cornerAfter = maxInCorner(best.s.b, maxR);
+    var emptyAfter = best.s.b.filter(function (x) { return !x; }).length;
+    if (valid.length === 1) why.push('C\'est le seul coup qui fait bouger les tuiles.');
+    if (best.s.merges.length) {
+      var top = Math.pow(2, Math.max.apply(null, best.s.merges));
+      why.push(best.s.merges.length === 1
+        ? 'Fusionne deux ' + top / 2 + ' en ' + top + ' (+' + best.s.gain + ' points).'
+        : 'Fait ' + best.s.merges.length + ' fusions, dont deux ' + top / 2 + ' en ' + top + ' (+' + best.s.gain + ' points).');
+    }
+    if (maxR >= 4 && cornerAfter >= 0) {
+      var leavers = valid.filter(function (m) { return m !== best && maxInCorner(m.s.b, maxR) < 0; });
+      if (cornerNow < 0) why.push('Ramène ton ' + maxV + ' dans le coin ' + CORNERS[cornerAfter] + ', la place la plus sûre pour ta plus grosse tuile.');
+      else if (leavers.length) {
+        why.push('Garde ton ' + maxV + ' calé dans son coin ' + CORNERS[cornerAfter] + '.');
+        avoid.push('Évite ' + DIRS[leavers[0].dir][1] + ' : ton ' + maxV + ' quitterait son coin.');
+      }
+      var edge = orderedEdge(best.s.b, cornerAfter);
+      if (edge) why.push('La ' + edge.name + ' reste rangée en ordre décroissant (' + edge.vals.map(function (r) { return Math.pow(2, r); }).join(', ') + '), ce qui prépare les prochaines fusions.');
+    }
+    if (free <= 3 && emptyAfter > free) why.push('Le plateau est presque plein : ce coup redonne de l\'air avec ' + plural(emptyAfter, 'case') + ' libre' + (emptyAfter > 1 ? 's' : '') + '.');
+    valid.forEach(function (m) {
+      var e = m.s.b.filter(function (x) { return !x; }).length;
+      if (m !== best && m.verdict === 'À éviter' && e <= 1 && !avoid.length)
+        avoid.push('Évite ' + DIRS[m.dir][1] + ' : il ne laisserait que ' + plural(e, 'case') + ' libre' + (e > 1 ? 's' : '') + '.');
+    });
+    why = why.slice(0, 3);
+    if (why.length < 2) why.push('En simulant ' + depth + ' coups d\'avance et les tuiles qui peuvent apparaître, c\'est celui qui garde la position la plus solide.');
+    var close = valid[1] && valid[1].verdict === 'Correct' ? valid[1] : null;
+    if (close) why.push(DIRS[close.dir][1] + ' ' + DIRS[close.dir][0] + ' est presque aussi bon.');
+    return { best: best, moves: moves, why: why, avoid: avoid.slice(0, 1) };
+  }
+
+  var hintOn = false, hintTimer = null;
+  var hintBtn = document.getElementById('hintBtn'), hintPanel = document.getElementById('hintPanel');
+  var hintArrow = document.getElementById('hintArrow');
+  try { hintOn = localStorage.getItem('hint2048') === '1'; } catch (e) {}
+  function scheduleHint() { clearTimeout(hintTimer); hintTimer = setTimeout(renderHint, 0); }
+  function renderHint() {
+    hintBtn.setAttribute('aria-pressed', hintOn);
+    var a = hintOn && !over && overlay.hidden ? analyse() : null;
+    hintArrow.hidden = hintPanel.hidden = !a;
+    if (!a) return;
+    hintArrow.firstElementChild.style.setProperty('--rot', ROT[a.best.dir] + 'deg');
+    document.getElementById('hintDir').textContent = DIRS[a.best.dir][0];
+    document.getElementById('hintTitle').textContent = DIRS[a.best.dir][1];
+    var ul = document.getElementById('hintWhy'); ul.innerHTML = '';
+    a.why.concat(a.avoid).forEach(function (txt, i) {
+      var li = document.createElement('li'); li.textContent = txt;
+      if (i >= a.why.length) li.className = 'avoid';
+      ul.appendChild(li);
+    });
+    var box = document.getElementById('hintMoves'); box.innerHTML = '';
+    a.moves.forEach(function (m) {
+      var btn = document.createElement('button');
+      btn.innerHTML = '<span></span><small></small>';
+      btn.firstChild.textContent = DIRS[m.dir][0]; btn.lastChild.textContent = m.verdict;
+      btn.setAttribute('aria-label', DIRS[m.dir][1] + ' : ' + m.verdict);
+      if (m === a.best) btn.className = 'best';
+      btn.disabled = !m.ok;
+      btn.onclick = function () { move(m.dir); };
+      box.appendChild(btn);
+    });
+  }
+  hintBtn.onclick = function () {
+    hintOn = !hintOn;
+    try { localStorage.setItem('hint2048', hintOn ? '1' : '0'); } catch (e) {}
+    renderHint();
+  };
 
   newGame();
 })();

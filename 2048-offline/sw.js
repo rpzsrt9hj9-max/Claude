@@ -1,4 +1,4 @@
-const CACHE = "2048-v3";
+const CACHE = "2048-v4";
 const FILES = ["./", "./index.html", "./manifest.json", "./icon.svg", "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", (e) => {
