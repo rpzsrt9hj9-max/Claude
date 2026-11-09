@@ -115,7 +115,7 @@ footer { color: var(--muted); font-size: 13px; }
     <p>Fusionnez les tuiles identiques pour atteindre 2048.</p>
     <button id="undo" class="ghost" title="Annuler (U, Retour arrière ou Ctrl+Z)">↶ Retour <span id="moves">0</span></button>
     <button id="restart">Nouvelle partie</button>
-    <button id="theme" class="ghost" aria-label="Changer de thème">Thème</button>
+    <button id="theme" class="ghost" aria-pressed="false">Mode nuit</button>
   </div>
   <div class="board" id="board" tabindex="0" aria-label="Plateau de jeu">
     <div id="overlay" class="overlay" hidden></div>
@@ -268,13 +268,17 @@ footer { color: var(--muted); font-size: 13px; }
 
   undoBtn.onclick = undo;
   document.getElementById('restart').onclick = newGame;
-  document.getElementById('theme').onclick = function () {
-    var root = document.documentElement, cur = root.getAttribute('data-theme') ||
-      (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-    var next = cur === 'dark' ? 'light' : 'dark'; root.setAttribute('data-theme', next);
+  var themeBtn = document.getElementById('theme'), darkQuery = matchMedia('(prefers-color-scheme: dark)');
+  function isDark() { return (document.documentElement.getAttribute('data-theme') || (darkQuery.matches ? 'dark' : 'light')) === 'dark'; }
+  function syncTheme() { themeBtn.textContent = isDark() ? 'Mode jour' : 'Mode nuit'; themeBtn.setAttribute('aria-pressed', isDark()); }
+  themeBtn.onclick = function () {
+    var next = isDark() ? 'light' : 'dark'; document.documentElement.setAttribute('data-theme', next);
     try { localStorage.setItem('theme2048', next); } catch (e) {}
+    syncTheme();
   };
   try { var th = localStorage.getItem('theme2048'); if (th) document.documentElement.setAttribute('data-theme', th); } catch (e) {}
+  if (darkQuery.addEventListener) darkQuery.addEventListener('change', syncTheme);
+  syncTheme();
 
   newGame();
 })();
