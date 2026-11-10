@@ -29,6 +29,7 @@
   --txt-lo: #1f3350;
   --txt-hi: #ffffff;
   --font-display: "Avenir Next", "Segoe UI Black", "Arial Black", system-ui, sans-serif;
+  --turbo: hsl(14 88% 52%);
   --font-body: system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 @media (prefers-color-scheme: dark) {
@@ -127,9 +128,29 @@ button:focus-visible { outline: 3px solid var(--fg); outline-offset: 2px; }
 .hint-moves button small { font-size: 11px; font-weight: 500; color: var(--muted); }
 .hint-moves button.best { background: var(--btn); color: var(--btn-fg); }
 .hint-moves button.best small { color: var(--btn-fg); opacity: 0.8; }
+#turboBtn[aria-pressed="true"] { background: var(--turbo); color: #fff; }
+.rush { position: relative; height: 28px; border-radius: 8px; background: var(--panel); overflow: hidden; }
+.rush-fill { position: absolute; inset: 0 auto 0 0; width: calc(var(--p, 1) * 100%); background: hsl(calc(var(--p, 1) * 120) 75% 50% / 0.8); }
+.rush-text { position: relative; height: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 10px; font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.board.shake { animation: shake 0.28s; }
+@keyframes shake { 20% { transform: translate(-6px, 2px); } 40% { transform: translate(5px, -3px); } 60% { transform: translate(-4px, 3px); } 80% { transform: translate(3px, -2px); } }
+.fx { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 3; }
+.combo-pop {
+  position: absolute; left: 0; right: 0; top: 36%; text-align: center; pointer-events: none; z-index: 4; opacity: 0;
+  font-family: var(--font-display); font-weight: 800; font-size: 12cqw; letter-spacing: -0.02em;
+  color: var(--pop, var(--fg)); -webkit-text-stroke: 1.4cqw var(--bg); paint-order: stroke fill;
+}
+.combo-pop.show { animation: popText 0.8s ease-out; }
+@keyframes popText {
+  0% { opacity: 0; transform: scale(0.4) rotate(-6deg); }
+  20% { opacity: 1; transform: scale(1.12) rotate(3deg); }
+  60% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: translateY(-25%); }
+}
+@keyframes fadeText { 20%, 60% { opacity: 1; } }
 footer { color: var(--muted); font-size: 13px; }
 @media (max-width: 420px) { h1 { font-size: 44px; } .score { min-width: 74px; padding: 8px 10px; } }
-@media (prefers-reduced-motion: reduce) { .tile { transition: none; } .tile.new, .tile.merged, .gain.show, .hint-arrow svg { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .tile { transition: none; } .tile.new, .tile.merged, .gain.show, .hint-arrow svg, .board.shake { animation: none; } .combo-pop.show { animation: fadeText 0.8s; } }
 </style>
 </head>
 <body>
@@ -148,9 +169,13 @@ footer { color: var(--muted); font-size: 13px; }
     <button id="restart">Nouvelle partie</button>
     <button id="theme" class="ghost" aria-pressed="false">Mode nuit</button>
     <button id="hintBtn" class="ghost" aria-pressed="false" title="Afficher le meilleur coup (H)">Indice</button>
+    <button id="turboBtn" class="ghost" aria-pressed="false" title="Mode Turbo : chrono et combos (T)">Turbo</button>
   </div>
+  <div class="rush" id="rush" hidden><div class="rush-fill" id="rushFill"></div><div class="rush-text"><span>Joue avant la fin de la barre</span><span id="comboTag">Combo ×1</span></div></div>
   <div class="board" id="board" tabindex="0" aria-label="Plateau de jeu">
     <div class="hint-arrow" id="hintArrow" hidden><div><svg viewBox="0 0 100 100" aria-hidden="true"><path d="M12 39 H55 V20 L88 50 L55 80 V61 H12 Z"/></svg></div></div>
+    <canvas class="fx" id="fx" aria-hidden="true"></canvas>
+    <div class="combo-pop" id="comboPop" aria-hidden="true"></div>
     <div id="overlay" class="overlay" hidden></div>
   </div>
   <section class="hint" id="hintPanel" hidden aria-live="polite">
@@ -158,7 +183,7 @@ footer { color: var(--muted); font-size: 13px; }
     <ul id="hintWhy"></ul>
     <div class="hint-moves" id="hintMoves"></div>
   </section>
-  <footer>Flèches, WASD ou glissement du doigt. <b>U</b>, Retour arrière ou Ctrl+Z pour revenir en arrière, sans limite. <b>H</b> affiche ou masque les indices.</footer>
+  <footer>Flèches, WASD ou glissement du doigt. <b>U</b>, Retour arrière ou Ctrl+Z pour revenir en arrière, sans limite. <b>H</b> affiche ou masque les indices. <b>T</b> lance le mode Turbo : 3 secondes par coup, sinon une tuile tombe en plus ; les fusions enchaînées multiplient les points.</footer>
 </div>
 
 <script>
@@ -185,7 +210,7 @@ footer { color: var(--muted); font-size: 13px; }
   function newGame() {
     Object.keys(els).forEach(function (k) { els[k].remove(); }); els = {};
     grid = empty(); score = 0; history = []; nextId = 1; won = false; keepGoing = false; over = false;
-    spawn(); spawn(); hideOverlay(); update();
+    spawn(); spawn(); hideOverlay(); turboReset(); update();
   }
 
   function spawn() {
@@ -232,7 +257,8 @@ footer { color: var(--muted); font-size: 13px; }
     }
     if (removed.length) moved = true;
     if (!moved) return;
-    history.push(before); score += gained;
+    history.push(before);
+    var bonus = turboOn ? turboMove(gained) : 0; score += gained + bonus;
     removed.forEach(function (b) {
       b.r = b.into.r; b.c = b.into.c; setPos(els[b.id], b.r, b.c);
       var el = els[b.id]; delete els[b.id]; setTimeout(function () { el.remove(); }, 90);
@@ -241,7 +267,7 @@ footer { color: var(--muted); font-size: 13px; }
       var t = grid[r2][c2]; if (t) { draw(t, t.merged ? 'merged' : ''); t.merged = false; }
     }
     spawn();
-    if (gained) { gainEl.textContent = '+' + gained; gainEl.classList.remove('show'); void gainEl.offsetWidth; gainEl.classList.add('show'); }
+    if (gained) { gainEl.textContent = '+' + (gained + bonus); gainEl.classList.remove('show'); void gainEl.offsetWidth; gainEl.classList.add('show'); }
     update(); checkEnd();
   }
 
@@ -267,6 +293,7 @@ footer { color: var(--muted); font-size: 13px; }
     var s = history.pop();
     Object.keys(els).forEach(function (k) { els[k].remove(); }); els = {};
     grid = empty(); score = s.s; over = false; hideOverlay();
+    combo = 1; rushLeft = RUSH_MS; rushStarted = false; syncTurbo();
     s.g.forEach(function (row, r) { row.forEach(function (v, c) {
       if (v) { var t = { id: nextId++, v: v, r: r, c: c }; grid[r][c] = t; draw(t, ''); }
     }); });
@@ -294,6 +321,7 @@ footer { color: var(--muted); font-size: 13px; }
     if (((e.ctrlKey || e.metaKey) && k === 'z') || k === 'u' || k === 'Backspace') { e.preventDefault(); undo(); return; }
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     if (k === 'h') { hintBtn.click(); return; }
+    if (k === 't') { turboBtn.click(); return; }
     if (k in keys) { e.preventDefault(); move(keys[k]); }
   });
 
@@ -497,6 +525,109 @@ footer { color: var(--muted); font-size: 13px; }
     hintOn = !hintOn;
     try { localStorage.setItem('hint2048', hintOn ? '1' : '0'); } catch (e) {}
     renderHint();
+  };
+
+
+  // ---- Mode Turbo : chrono qui punit la lenteur, combos multiplicateurs, explosions de particules ----
+  var RUSH_MS = 3000, COMBO_MS = 1500;
+  var turboOn = false, combo = 1, bestCombo = 1, lastMerge = 0, rushLeft = RUSH_MS, rushStarted = false, topTile = 0;
+  var turboBtn = document.getElementById('turboBtn'), rushEl = document.getElementById('rush');
+  var rushFill = document.getElementById('rushFill'), comboTag = document.getElementById('comboTag');
+  var popEl = document.getElementById('comboPop'), fx = document.getElementById('fx'), ctx = fx.getContext('2d');
+  var calm = matchMedia('(prefers-reduced-motion: reduce)'), particles = [], looping = false, lastFrame = 0;
+  try { turboOn = localStorage.getItem('turbo2048') === '1'; } catch (e) {}
+
+  function turboReset() {
+    combo = 1; bestCombo = 1; lastMerge = 0; rushLeft = RUSH_MS; rushStarted = false;
+    topTile = maxTile(); syncTurbo();
+  }
+  function maxTile() { var m = 0; grid.forEach(function (row) { row.forEach(function (t) { if (t && t.v > m) m = t.v; }); }); return m; }
+  function hue(v) { return 212 - Math.log2(v) * 21; }
+
+  // Appelé après chaque coup valide ; renvoie les points bonus du combo.
+  function turboMove(gained) {
+    var now = performance.now(), merged = [];
+    rushStarted = true; rushLeft = RUSH_MS;
+    grid.forEach(function (row) { row.forEach(function (t) { if (t && t.merged) merged.push(t); }); });
+    if (!gained) { syncTurbo(); startLoop(); return 0; }
+    combo = now - lastMerge < COMBO_MS ? Math.min(combo + 1, 8) : 1;
+    lastMerge = now; bestCombo = Math.max(bestCombo, combo);
+    merged.forEach(function (t) { burst(t, 6 + Math.log2(t.v) * 2); });
+    var m = maxTile();
+    if (m > topTile && m >= 64) {
+      pop(m + ' !', 'hsl(' + hue(m) + ' 85% 55%)');
+      merged.forEach(function (t) { if (t.v === m) burst(t, 60); });
+      shake();
+    } else if (combo >= 2) {
+      pop('Combo ×' + combo + (combo >= 5 ? ' !' : ''), 'hsl(' + (50 - combo * 7) + ' 95% 55%)');
+      if (combo >= 4) shake();
+    }
+    topTile = Math.max(topTile, m);
+    syncTurbo(); startLoop();
+    return gained * (combo - 1);
+  }
+
+  function penalty() {
+    rushLeft = RUSH_MS; combo = 1;
+    spawn(); pop('Trop lent !', 'hsl(355 85% 58%)'); shake();
+    update(); checkEnd(); syncTurbo();
+  }
+
+  function pop(text, color) {
+    popEl.textContent = text; popEl.style.setProperty('--pop', color);
+    popEl.classList.remove('show'); void popEl.offsetWidth; popEl.classList.add('show');
+  }
+  function shake() {
+    if (calm.matches) return;
+    boardEl.classList.remove('shake'); void boardEl.offsetWidth; boardEl.classList.add('shake');
+  }
+  function burst(t, count) {
+    if (calm.matches) return;
+    var cx = (pos(t.c) + 10.9375) / 100, cy = (pos(t.r) + 10.9375) / 100, h = hue(t.v);
+    for (var i = 0; i < count; i++) {
+      var a = Math.random() * Math.PI * 2, sp = 0.15 + Math.random() * 0.55;
+      particles.push({ x: cx, y: cy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 0.25, life: 1,
+        size: 0.008 + Math.random() * 0.014, color: 'hsl(' + (h + Math.random() * 40 - 20) + ' 85% 58%)' });
+    }
+  }
+
+  function syncTurbo() {
+    turboBtn.setAttribute('aria-pressed', turboOn);
+    rushEl.hidden = !turboOn;
+    rushFill.style.setProperty('--p', Math.max(0, rushLeft / RUSH_MS).toFixed(3));
+    comboTag.textContent = 'Combo ×' + combo + ' · record ×' + bestCombo;
+  }
+
+  function startLoop() { if (!looping) { looping = true; lastFrame = performance.now(); requestAnimationFrame(tick); } }
+  function tick(now) {
+    var dt = Math.min(100, now - lastFrame); lastFrame = now;
+    if (turboOn && rushStarted && !over && overlay.hidden) {
+      rushLeft -= dt;
+      if (rushLeft <= 0) penalty();
+      rushFill.style.setProperty('--p', Math.max(0, rushLeft / RUSH_MS).toFixed(3));
+    }
+    var w = boardEl.clientWidth, dpr = window.devicePixelRatio || 1;
+    if (fx.width !== Math.round(w * dpr)) { fx.width = fx.height = Math.round(w * dpr); }
+    ctx.setTransform(dpr * w, 0, 0, dpr * w, 0, 0);
+    ctx.clearRect(0, 0, 1, 1);
+    var s = dt / 1000;
+    particles = particles.filter(function (p) {
+      p.vy += 1.4 * s; p.x += p.vx * s; p.y += p.vy * s; p.life -= s * 1.6;
+      if (p.life <= 0) return false;
+      ctx.globalAlpha = p.life; ctx.fillStyle = p.color;
+      ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
+      return true;
+    });
+    ctx.globalAlpha = 1;
+    if ((turboOn && rushStarted && !over) || particles.length) requestAnimationFrame(tick);
+    else looping = false;
+  }
+
+  turboBtn.onclick = function () {
+    turboOn = !turboOn;
+    try { localStorage.setItem('turbo2048', turboOn ? '1' : '0'); } catch (e) {}
+    combo = 1; rushLeft = RUSH_MS; rushStarted = false; syncTurbo();
+    syncTurbo();
   };
 
   newGame();
