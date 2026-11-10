@@ -147,10 +147,14 @@ button:focus-visible { outline: 3px solid var(--fg); outline-offset: 2px; }
   60% { opacity: 1; transform: scale(1); }
   100% { opacity: 0; transform: translateY(-25%); }
 }
+.tile.drop { animation: drop 0.38s cubic-bezier(0.3, 1.5, 0.5, 1) 0.06s backwards; z-index: 2; }
+@keyframes drop { from { transform: translateY(-340%) scale(1.25); opacity: 0; } 40% { opacity: 1; } to { transform: none; } }
+.tile.boom { animation: boom 0.25s ease-out forwards; z-index: 2; }
+@keyframes boom { to { transform: scale(1.7) rotate(12deg); opacity: 0; } }
 @keyframes fadeText { 20%, 60% { opacity: 1; } }
 footer { color: var(--muted); font-size: 13px; }
 @media (max-width: 420px) { h1 { font-size: 44px; } .score { min-width: 74px; padding: 8px 10px; } }
-@media (prefers-reduced-motion: reduce) { .tile { transition: none; } .tile.new, .tile.merged, .gain.show, .hint-arrow svg, .board.shake { animation: none; } .combo-pop.show { animation: fadeText 0.8s; } }
+@media (prefers-reduced-motion: reduce) { .tile { transition: none; } .tile.new, .tile.merged, .gain.show, .hint-arrow svg, .board.shake, .tile.drop { animation: none; } .combo-pop.show { animation: fadeText 0.8s; } }
 </style>
 </head>
 <body>
@@ -183,7 +187,7 @@ footer { color: var(--muted); font-size: 13px; }
     <ul id="hintWhy"></ul>
     <div class="hint-moves" id="hintMoves"></div>
   </section>
-  <footer>Flèches, WASD ou glissement du doigt. <b>U</b>, Retour arrière ou Ctrl+Z pour revenir en arrière, sans limite. <b>H</b> affiche ou masque les indices. <b>T</b> lance le mode Turbo : 3 secondes par coup, sinon une tuile tombe en plus ; les fusions enchaînées multiplient les points.</footer>
+  <footer>Flèches, WASD ou glissement du doigt. <b>U</b>, Retour arrière ou Ctrl+Z pour revenir en arrière, sans limite. <b>H</b> affiche ou masque les indices. <b>T</b> lance le mode Turbo : 3 secondes par coup, sinon une tuile tombe en plus ; les fusions enchaînées multiplient les points et font tomber de grosses tuiles (8, 16, 32) ; une fusion de 128 ou plus souffle les petites tuiles autour.</footer>
 </div>
 
 <script>
@@ -217,9 +221,9 @@ footer { color: var(--muted); font-size: 13px; }
     var free = [];
     for (var r = 0; r < N; r++) for (var c = 0; c < N; c++) if (!grid[r][c]) free.push([r, c]);
     if (!free.length) return;
-    var p = free[Math.floor(Math.random() * free.length)];
-    var t = { id: nextId++, v: Math.random() < 0.9 ? 2 : 4, r: p[0], c: p[1] };
-    grid[p[0]][p[1]] = t; draw(t, 'new');
+    var p = free[Math.floor(Math.random() * free.length)], drop = nextDrop; nextDrop = 0;
+    var t = { id: nextId++, v: drop || (Math.random() < 0.9 ? 2 : 4), r: p[0], c: p[1] };
+    grid[p[0]][p[1]] = t; draw(t, drop ? 'drop' : 'new');
   }
 
   function draw(t, anim) {
@@ -293,7 +297,7 @@ footer { color: var(--muted); font-size: 13px; }
     var s = history.pop();
     Object.keys(els).forEach(function (k) { els[k].remove(); }); els = {};
     grid = empty(); score = s.s; over = false; hideOverlay();
-    combo = 1; rushLeft = RUSH_MS; rushStarted = false; syncTurbo();
+    combo = 1; rushLeft = RUSH_MS; rushStarted = false; nextDrop = 0; syncTurbo();
     s.g.forEach(function (row, r) { row.forEach(function (v, c) {
       if (v) { var t = { id: nextId++, v: v, r: r, c: c }; grid[r][c] = t; draw(t, ''); }
     }); });
@@ -534,11 +538,12 @@ footer { color: var(--muted); font-size: 13px; }
   var turboBtn = document.getElementById('turboBtn'), rushEl = document.getElementById('rush');
   var rushFill = document.getElementById('rushFill'), comboTag = document.getElementById('comboTag');
   var popEl = document.getElementById('comboPop'), fx = document.getElementById('fx'), ctx = fx.getContext('2d');
-  var calm = matchMedia('(prefers-reduced-motion: reduce)'), particles = [], looping = false, lastFrame = 0;
+  var calm = matchMedia('(prefers-reduced-motion: reduce)'), particles = [], rings = [], looping = false, lastFrame = 0;
+  var nextDrop = 0;
   try { turboOn = localStorage.getItem('turbo2048') === '1'; } catch (e) {}
 
   function turboReset() {
-    combo = 1; bestCombo = 1; lastMerge = 0; rushLeft = RUSH_MS; rushStarted = false;
+    combo = 1; bestCombo = 1; lastMerge = 0; rushLeft = RUSH_MS; rushStarted = false; nextDrop = 0;
     topTile = maxTile(); syncTurbo();
   }
   function maxTile() { var m = 0; grid.forEach(function (row) { row.forEach(function (t) { if (t && t.v > m) m = t.v; }); }); return m; }
@@ -553,18 +558,41 @@ footer { color: var(--muted); font-size: 13px; }
     combo = now - lastMerge < COMBO_MS ? Math.min(combo + 1, 8) : 1;
     lastMerge = now; bestCombo = Math.max(bestCombo, combo);
     merged.forEach(function (t) { burst(t, 6 + Math.log2(t.v) * 2); });
+    var blasted = 0;
+    merged.forEach(function (t) { if (t.v >= 128) blasted += shockwave(t); });
     var m = maxTile();
     if (m > topTile && m >= 64) {
       pop(m + ' !', 'hsl(' + hue(m) + ' 85% 55%)');
       merged.forEach(function (t) { if (t.v === m) burst(t, 60); });
       shake();
+    } else if (blasted) {
+      pop('Boum ! +' + blasted, 'hsl(28 95% 55%)'); shake();
     } else if (combo >= 2) {
       pop('Combo ×' + combo + (combo >= 5 ? ' !' : ''), 'hsl(' + (50 - combo * 7) + ' 95% 55%)');
       if (combo >= 4) shake();
     }
     topTile = Math.max(topTile, m);
+    nextDrop = combo >= 8 ? 32 : combo >= 5 ? 16 : combo >= 3 ? 8 : 0;
     syncTurbo(); startLoop();
-    return gained * (combo - 1);
+    return gained * (combo - 1) + blasted;
+  }
+
+  // Une grosse fusion (128 et plus) souffle les petites tuiles voisines ; plus la tuile est grosse, plus le souffle détruit gros.
+  function shockwave(t) {
+    var limit = t.v / 32, pts = 0;
+    rings.push({ x: (pos(t.c) + 10.9375) / 100, y: (pos(t.r) + 10.9375) / 100, life: 1, hue: hue(t.v) });
+    for (var dr = -1; dr <= 1; dr++) for (var dc = -1; dc <= 1; dc++) {
+      var n = grid[t.r + dr] && grid[t.r + dr][t.c + dc];
+      if (!n || n === t || n.merged || n.v > limit) continue;
+      grid[n.r][n.c] = null; pts += n.v; explode(n);
+    }
+    return pts;
+  }
+  function explode(n) {
+    var el = els[n.id]; delete els[n.id];
+    setPos(el, n.r, n.c); burst(n, 16);
+    setTimeout(function () { el.classList.add('boom'); }, 80);
+    setTimeout(function () { el.remove(); }, 340);
   }
 
   function penalty() {
@@ -618,8 +646,15 @@ footer { color: var(--muted); font-size: 13px; }
       ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
       return true;
     });
+    rings = rings.filter(function (g) {
+      g.life -= s * 2.2;
+      if (g.life <= 0) return false;
+      ctx.globalAlpha = g.life; ctx.strokeStyle = 'hsl(' + g.hue + ' 90% 60%)'; ctx.lineWidth = 0.03 * g.life;
+      ctx.beginPath(); ctx.arc(g.x, g.y, 0.1 + (1 - g.life) * 0.34, 0, Math.PI * 2); ctx.stroke();
+      return true;
+    });
     ctx.globalAlpha = 1;
-    if ((turboOn && rushStarted && !over) || particles.length) requestAnimationFrame(tick);
+    if ((turboOn && rushStarted && !over) || particles.length || rings.length) requestAnimationFrame(tick);
     else looping = false;
   }
 
